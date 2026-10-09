@@ -1,0 +1,60 @@
+{
+  "app": {
+    "title": "Narayan Jewellers Management System",
+    "tagline": "Jewellery Shop Management",
+    "version": "v1.0.0"
+  },
+  "nav": {
+    "dashboard": "Home",
+    "pos": "Sell",
+    "customers": "Customers",
+    "inventory": "Inventory",
+    "girvi": "Girvi",
+    "credit": "Credit (Udhaar)",
+    "barcode": "Barcode Studio",
+    "reports": "Reports",
+    "finance": "Finance",
+    "settings": "Settings",
+    "drafts": "Drafts",
+    "more": "More"
+  },
+  "auth": {
+    "login": "Sign In",
+    "username": "Username",
+    "password": "Password",
+    "totpCode": "Authenticator Code (2FA)",
+    "pin": "Security PIN",
+    "loggingIn": "Signing in...",
+    "loginFailed": "Invalid username or password"
+  },
+  "common": {
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "Saved ✓",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "search": "Search...",
+    "resume": "Resume",
+    "discard": "Discard",
+    "unsavedDraft": "Unsaved draft found",
+    "offline": "Offline: will sync when connected"
+  },
+  "settings": {
+    "title": "Shop & System Settings",
+    "shopProfile": "Shop Profile",
+    "shopName": "Shop Display Name",
+    "address": "Address",
+    "phone": "Contact Phone",
+    "gstin": "GSTIN",
+    "gstToggle": "Enable GST Calculation (Tax Invoice)",
+    "gstEnabled": "GST Calculation Active",
+    "gstDisabled": "GST Calculation Disabled (Non-GST / Bill of Supply)",
+    "jewelleryGst": "Jewellery GST %",
+    "makingGst": "Job Work / Making GST %",
+    "goldInterest": "Default Gold Monthly Interest %",
+    "silverInterest": "Default Silver Monthly Interest %",
+    "ltvLimit": "Maximum LTV Limit %",
+    "staffDiscount": "Staff Max Discount %",
+    "managerDiscount": "Manager Max Discount %"
+  }
+}

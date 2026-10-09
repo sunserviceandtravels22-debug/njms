@@ -1,0 +1,1414 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "debian-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────── Enums ─────────
+enum CustomerTag {
+  STANDARD
+  VIP
+  RISK
+  BLOCKED
+  HAS_REPLEDGED
+  PAID_AWAITING_RELEASE
+  MANUAL_INTEREST
+  SETTLED_BY_REPLEDGE
+  RATE_OPEN
+  RATE_PARTLY_FIXED
+  SETTLEMENT_DUE
+  COST_REVISED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNSPECIFIED
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  STAFF
+  ACCOUNTANT
+}
+
+enum RelationType {
+  FATHER
+  MOTHER
+  HUSBAND
+  SELF
+  OTHER
+}
+
+enum Metal {
+  GOLD
+  SILVER
+}
+
+enum ItemStatus {
+  IN_STOCK
+  ON_HOLD
+  SOLD
+  WITH_KARIGAR
+  RETURNED
+  DAMAGED
+  PLEDGED
+  // D12-INX-09 additions
+  RESERVED_ORDER
+  ON_TRAY
+  ON_APPROVAL
+  IN_REPAIR_STAGE
+  RETURNED_TO_VENDOR
+  MELTED
+  LOST
+}
+
+// D12-INX-01 — Item classification (Sprint 5)
+enum ItemClass {
+  METAL_JEWELLERY
+  STONE_LOOSE
+  NON_METAL
+  COMPONENT
+  PACKAGING
+  SERVICE
+  CUSTOMER_PROPERTY
+}
+
+// D12-INX-20 — Stock tracking mode (Sprint 5)
+enum TrackingMode {
+  UNIQUE
+  PACK
+  COUNT
+  BULK_WEIGHT
+}
+
+// D12-WHS-04 — Item ownership flag (Sprint 7)
+enum ItemOwnership {
+  OWNED
+  MEMO_IN
+}
+
+// D12-WHS (Sprint 7)
+enum MemoLineStatus {
+  RECEIVED
+  ON_HOLD
+  COMMITTED
+  SOLD
+  RETURNED
+  LOST
+}
+
+enum RateMode {
+  LOCKED_AT_SALE
+  QUEUED_FLOATING
+}
+
+enum AlterPolicy {
+  ALTER_NONE
+  ALTER_MINOR
+  ALTER_FREE
+}
+
+enum MakingType {
+  PER_GRAM
+  PERCENT
+  FLAT
+}
+
+enum PayMode {
+  CASH
+  UPI
+  CARD
+  BANK
+  CREDIT
+}
+
+enum PayRefType {
+  SALE
+  CREDIT
+  GIRVI
+  OLD_GOLD
+  EXPENSE
+  CASHBOOK
+  TRANSFER
+  OPENING
+  REPLEDGE
+}
+
+enum VendorType {
+  SUPPLIER
+  KARIGAR
+  FINANCIER
+  WHOLESALER
+  OTHER
+}
+
+enum FundType {
+  CASH
+  BANK
+}
+
+enum CashGroup {
+  OPERATING
+  GIRVI
+  METAL
+  FINANCING
+  TRANSFER
+}
+
+enum TxnSource {
+  MANUAL
+  QUICK_CHIP
+  TEMPLATE
+  IMPORT
+}
+
+enum FlowKind {
+  SALE_RECEIPT
+  CREDIT_COLLECTION
+  GIRVI_LOAN_OUT
+  GIRVI_INTEREST_IN
+  GIRVI_PRINCIPAL_IN
+  OLD_GOLD_PAYOUT
+  ORDER_ADVANCE
+  REPAIR_RECEIPT
+  SCHEME_INSTALMENT
+  VENDOR_PAYMENT
+  KARIGAR_LABOUR
+  EXPENSE
+  OTHER_INCOME
+  TRANSFER
+  OWNER_CAPITAL
+  OWNER_DRAWING
+  LOAN_TAKEN
+  LOAN_REPAID
+  CASH_ADJUSTMENT
+  OPENING_BALANCE
+  REFUND
+  REPLEDGE_LOAN_IN
+  REPLEDGE_PRINCIPAL_OUT
+  REPLEDGE_INTEREST_OUT
+  REPLEDGE_FEE_OUT
+  // D12-WHS Sprint 7
+  LOSS_SETTLEMENT
+}
+
+enum Frequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  CUSTOM_DAYS
+}
+
+enum LocationType {
+  SHOP_DRAWER
+  VAULT
+  HOME
+  TRANSIT
+  VENDOR
+  STAFF
+  OTHER
+}
+
+enum RepledgeStatus {
+  PLANNED
+  ACTIVE
+  PARTIAL
+  CLOSED
+  CANCELLED
+}
+
+enum RepledgeEventType {
+  OPEN
+  TOPUP
+  INTEREST_PAYMENT
+  PRINCIPAL_PAYMENT
+  PART_RELEASE
+  RENEWAL
+  FEE
+  CLOSE
+  ADJUSTMENT
+  SETTLEMENT
+  SUBSTITUTION
+  REVERSAL
+}
+
+enum RecallStatus {
+  REQUESTED
+  REPAYING
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+enum Direction {
+  IN
+  OUT
+}
+
+enum InterestType {
+  NONE
+  SIMPLE
+  COMPOUND
+}
+
+enum RatePeriod {
+  MONTH
+  YEAR
+}
+
+enum Compounding {
+  MONTHLY
+  HALF_YEARLY
+  YEARLY
+}
+
+enum PartialRule {
+  PRORATA_DAYS
+  FULL_MONTH
+  HALF_AFTER_15
+}
+
+enum AllocationOrder {
+  INTEREST_FIRST
+  PRINCIPAL_FIRST
+}
+
+enum CreditStatus {
+  OPEN
+  PARTIAL
+  OVERDUE
+  CLOSED
+  WRITTEN_OFF
+}
+
+enum GirviStatus {
+  ACTIVE
+  PARTIAL
+  OVERDUE
+  REDEEMED
+  FORFEITED
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+  RETURNED
+  PARTIAL_RETURN
+}
+
+enum EventType {
+  OPEN
+  TOPUP
+  PAYMENT
+  INTEREST_PAYMENT
+  PRINCIPAL_PAYMENT
+  PART_RELEASE
+  RENEWAL
+  REDEMPTION
+  WRITE_OFF
+  SETTLEMENT
+  PROMISE
+  REMINDER
+  NOTICE
+  ADJUSTMENT
+  REVERSAL
+}
+
+enum MoveType {
+  PURCHASE
+  SALE
+  RETURN
+  ADJUSTMENT
+  HOLD
+  RELEASE_HOLD
+  PLEDGE
+  UNPLEDGE
+  AUDIT
+}
+
+// ───────── Platform Tables (M1) ─────────
+model User {
+  id            String    @id @default(cuid())
+  username      String    @unique @db.VarChar(60)
+  name          String    @db.VarChar(120)
+  role          Role
+  passwordHash  String    @db.VarChar(100)
+  pinHash       String?   @db.VarChar(100)
+  totpSecretEnc String?   @db.VarChar(255)
+  lang          String    @default("en") @db.VarChar(5)
+  active        Boolean   @default(true)
+  failedLogins  Int       @default(0)
+  lockedUntil   DateTime?
+  createdAt     DateTime  @default(now())
+  sessions      Session[]
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  tokenHash   String   @unique @db.VarChar(64)
+  device      String?  @db.VarChar(255)
+  ip          String?  @db.VarChar(45)
+  expiresAt   DateTime
+  lastSeenAt  DateTime
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Setting {
+  key         String   @id @db.VarChar(100)
+  value       Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+model Counter {
+  key       String @id @db.VarChar(100)
+  nextValue Int
+}
+
+model File {
+  id          String   @id @default(cuid())
+  kind        String   @db.VarChar(30)
+  storageKey  String   @db.VarChar(255)
+  mime        String   @db.VarChar(80)
+  sizeBytes   Int
+  sha256      String   @db.Char(64)
+  createdById String
+  createdAt   DateTime @default(now())
+}
+
+// ── ActivityLog (D12-LOG-01) — replaces AuditLog; old rows kept with legacy=true ──
+// Sprint 2 migration renames the table and adds all columns below.
+model ActivityLog {
+  id               BigInt    @id @default(autoincrement())
+  at               DateTime  @default(now())
+  businessDate     DateTime? @db.Date
+  userId           String?
+  userRole         String?   @db.VarChar(20)
+  sessionId        String?   @db.VarChar(40)
+  device           String?   @db.VarChar(255)
+  ip               String?   @db.VarChar(45)
+  module           String    @default("UNKNOWN") @db.VarChar(30)
+  entityType       String    @db.VarChar(60)
+  entityId         String    @db.VarChar(40)
+  parentEntityType String?   @db.VarChar(60)
+  parentEntityId   String?   @db.VarChar(40)
+  action           String    @db.VarChar(60)
+  severity         String    @default("INFO") @db.VarChar(10)
+  before           Json?
+  after            Json?
+  diff             Json?
+  reasonCode       String?   @db.VarChar(40)
+  reasonText       String?   @db.VarChar(255)
+  pinUsedBy        String?   @db.VarChar(40)
+  correlationId    String?   @db.VarChar(40)
+  rateSnapshotId   String?   @db.VarChar(40)
+  idempotencyKeyRef String?  @db.VarChar(64)
+  source           String    @default("UI") @db.VarChar(10)
+  prevHash         String?   @db.Char(64)
+  hash             String?   @db.Char(64)
+  legacy           Boolean   @default(false)
+
+  @@index([entityType, entityId])
+  @@index([userId, at])
+  @@index([correlationId])
+  @@index([module, at])
+}
+
+// ── Alert System (D12-ALT-01) — Sprint 3 ──
+model AlertRule {
+  id               String          @id @default(cuid())
+  code             String          @unique @db.VarChar(40)
+  module           String          @db.VarChar(30)
+  kind             String          @db.VarChar(15)  // EVENT | THRESHOLD | SCHEDULE | ABSENCE
+  paramsJson       Json
+  severity         String          @db.VarChar(10)  // INFO | WARN | CRITICAL
+  audienceJson     Json
+  channelsJson     Json
+  dedupeKeyExpr    String?         @db.VarChar(120)
+  autoResolveExpr  String?         @db.VarChar(120)
+  escalateAfterMin Int?
+  manualResolve    Boolean         @default(false)
+  active           Boolean         @default(true)
+  version          Int             @default(1)
+  instances        AlertInstance[]
+}
+
+model AlertInstance {
+  id            String    @id @default(cuid())
+  ruleId        String
+  rule          AlertRule @relation(fields: [ruleId], references: [id])
+  entityType    String    @db.VarChar(60)
+  entityId      String    @db.VarChar(40)
+  dedupeKey     String    @db.VarChar(120)
+  severity      String    @db.VarChar(10)
+  firstRaisedAt DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  occurrences   Int       @default(1)
+  status        String    @default("OPEN") @db.VarChar(15)
+  ackById       String?
+  ackAt         DateTime?
+  snoozeUntil   DateTime?
+  note          String?   @db.VarChar(255)
+  payloadJson   Json?
+  rateSnapshotId String?  @db.VarChar(40)
+
+  @@unique([ruleId, dedupeKey, status])
+  @@index([status, severity])
+  @@index([entityType, entityId])
+}
+
+model IdempotencyKey {
+  key          String   @id @db.VarChar(64)
+  userId       String
+  route        String   @db.VarChar(120)
+  status       String   @db.VarChar(12)
+  responseJson Json?
+  createdAt    DateTime @default(now())
+}
+
+model Draft {
+  id        String   @id @default(cuid())
+  userId    String
+  deviceId  String   @db.VarChar(64)
+  formType  String   @db.VarChar(40)
+  formKey   String   @db.VarChar(80)
+  payload   String   @db.LongText
+  updatedAt DateTime @updatedAt
+  expiresAt DateTime
+
+  @@unique([userId, formType, formKey])
+}
+
+// ───────── Customers (M2) ─────────
+model Customer {
+  id                  String       @id @default(cuid())
+  name                String       @db.VarChar(120)
+  nameHindi           String?      @db.VarChar(120)
+  phone               String       @db.VarChar(15)
+  altPhone            String?      @db.VarChar(15)
+  gender              Gender       @default(UNSPECIFIED)
+  dob                 DateTime?    @db.Date
+  relationType        RelationType @default(FATHER)
+  relationName        String?      @db.VarChar(120)
+  occupation          String?      @db.VarChar(80)
+  address             String?      @db.Text
+  permanentAddress    String?      @db.Text
+  locality            String?      @db.VarChar(80)
+  city                String       @default("Local") @db.VarChar(60)
+  pincode             String?      @db.VarChar(10)
+  photoUrl            String?      @db.VarChar(255)
+  photoDriveUrl       String?      @db.VarChar(255)
+  identityDocType     String?      @db.VarChar(30)
+  identityDocNumber   String?      @db.VarChar(50)
+  identityDocPhotoUrl String?      @db.VarChar(255)
+  secondaryContactName     String? @db.VarChar(120)
+  secondaryContactPhone    String? @db.VarChar(15)
+  secondaryContactRelation String? @db.VarChar(40)
+  searchKey           String?      @db.VarChar(200)
+  tag                 CustomerTag  @default(STANDARD)
+  creditLimitPaise    BigInt       @default(0)
+  notes               String?      @db.Text
+  createdById         String
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  sales               Sale[]
+  girviLoans          GirviLoan[]
+
+  @@index([phone])
+  @@index([name])
+  @@index([nameHindi])
+  @@index([searchKey])
+}
+
+// ───────── Daily Rates (M5) — kept read-only; superseded by RateSnapshot ─────────
+model DailyRate {
+  id                    String   @id @default(cuid())
+  date                  DateTime @db.Date
+  metal                 Metal
+  purityPpt             Int      // e.g. 916 for 22K, 1000 for 24K fine
+  ratePaisePerGram      BigInt   // Buy/valuation rate in paise/gram
+  sellRatePaisePerGram  BigInt?  // Selling rate in paise/gram
+  updatedById           String
+  updatedAt             DateTime @updatedAt
+
+  @@unique([date, metal, purityPpt])
+  @@index([date])
+}
+
+// ───────── Rate Snapshot (D12-RTS-01) — Sprint 1 ─────────
+model RateSnapshot {
+  id               String   @id @default(cuid())
+  shopId           String   @default("main")
+  versionNo        Int                          // per-shop sequential
+  effectiveAt      DateTime                     // UTC, minute precision
+  enteredByUserId  String
+  gold24Paise      BigInt
+  gold22Paise      BigInt
+  gold18Paise      BigInt?
+  gold14Paise      BigInt?
+  silver999Paise   BigInt
+  silver925Paise   BigInt?
+  buyAdjustBp      Int?
+  sellAdjustBp     Int?
+  source           String   @default("MANUAL") @db.VarChar(10)  // MANUAL | IMPORT | API
+  correctionOfId   String?
+  note             String?  @db.VarChar(255)
+  rateFlags        String?  @db.VarChar(80)  // CSV: CARRIED_FORWARD, OVERRIDDEN, BACKFILLED, CORRECTION
+
+  @@unique([shopId, versionNo])
+  @@index([shopId, effectiveAt])
+}
+
+// ───────── Inventory (M3) ─────────
+model InventoryItem {
+  id               String        @id @default(cuid())
+  tagNo            String        @unique @db.VarChar(30)  // Barcode tag number
+  sku              String        @db.VarChar(60)
+  name             String        @db.VarChar(120)
+  metal            Metal
+  purityPpt        Int           @default(916)
+  category         String        @db.VarChar(60)
+  grossWeightMg    Int           // Stored in mg (1g = 1000mg)
+  stoneWeightMg    Int           @default(0)
+  netWeightMg      Int           // Stored in mg
+  makingType       MakingType    @default(PER_GRAM)
+  makingValuePaise BigInt        @default(0)
+  huid             String?       @db.VarChar(30)
+  status           ItemStatus    @default(IN_STOCK)
+  photoUrl         String?       @db.VarChar(255)
+  createdById      String
+  createdAt        DateTime      @default(now())
+  // ── D12-INX-01 extensions (Sprint 5) ──
+  itemClass        ItemClass     @default(METAL_JEWELLERY)
+  trackingMode     TrackingMode  @default(UNIQUE)
+  quantity         Int           @default(1)
+  piecesPerPack    Int?
+  packTareMg       Int?
+  netRemainingMg   Int?          // For OPENED packs — updated on each piece sale
+  openedUnits      Int?
+  reorderLevel     Int?
+  reorderQty       Int?
+  preferredVendorId String?
+  hsn              String?       @db.VarChar(20)
+  gstRateBp        Int?
+  costPaise        BigInt?
+  costRateSnapshotId String?
+  rateSnapshotId   String?       // D12-RTS-02: stamp at creation
+  isDisplayOnly    Boolean       @default(false)
+  attributesJson   Json?
+  // ── D12-WHS-04 (Sprint 7) ──
+  ownership        ItemOwnership @default(OWNED)
+  memoInLineId     String?       // FK set when ownership=MEMO_IN
+
+  @@index([tagNo])
+  @@index([status, metal])
+  @@index([ownership, status])
+  @@index([itemClass, status])
+}
+
+// ───────── Sales & POS (M5) ─────────
+model Sale {
+  id              String     @id @default(cuid())
+  invoiceNo       String     @unique @db.VarChar(24)
+  customerId      String?
+  customer        Customer?  @relation(fields: [customerId], references: [id])
+  date            DateTime   @db.Date
+  gstEnabled      Boolean    @default(true) // Snapshot of GST toggle state
+  subtotalPaise   BigInt
+  discountPaise   BigInt
+  taxablePaise    BigInt
+  gstPaise        BigInt
+  roundOffPaise   BigInt
+  oldGoldAdjPaise BigInt     @default(0)
+  totalPaise      BigInt
+  paidPaise       BigInt
+  creditId        String?
+  status          SaleStatus @default(COMPLETED)
+  idempotencyKey  String     @unique @db.VarChar(64)
+  createdById     String
+  createdAt       DateTime   @default(now())
+  items           SaleItem[]
+
+  @@index([customerId, date])
+}
+
+model SaleItem {
+  id               String        @id @default(cuid())
+  saleId           String
+  inventoryItemId String?
+  tagNo            String?       @db.VarChar(30)
+  name             String        @db.VarChar(120)
+  metal            Metal
+  purityPpt        Int
+  grossWeightMg    Int
+  netWeightMg      Int
+  ratePaisePerGram BigInt
+  metalValuePaise  BigInt
+  makingType       MakingType    @default(PER_GRAM)
+  makingValuePaise BigInt        @default(0)
+  makingChargePaise BigInt       @default(0)
+  totalPaise       BigInt
+  sale             Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+}
+
+// ───────── Girvi Pawnbroking (M7) ─────────
+model GirviLoan {
+  id                      String       @id @default(cuid())
+  loanNo                  String       @unique @db.VarChar(24)
+  customerId              String
+  customer                Customer     @relation(fields: [customerId], references: [id])
+  date                    DateTime     @db.Date
+  dueDate                 DateTime?    @db.Date
+  principalPaise          BigInt
+  interestRatePerMonthPct Decimal      @default(1.50) @db.Decimal(5, 2)
+  status                  GirviStatus  @default(ACTIVE)
+  notes                   String?      @db.Text
+  createdById             String
+  createdAt               DateTime     @default(now())
+  items                   GirviItem[]
+
+  @@index([customerId, status])
+}
+
+model GirviItem {
+  id             String           @id @default(cuid())
+  girviLoanId    String
+  ornamentType   String           @db.VarChar(80)
+  metal          Metal            @default(GOLD)
+  purity         String           @default("22K") @db.VarChar(20)
+  grossWeightMg  Int
+  stoneWeightMg  Int              @default(0)
+  netWeightMg    Int
+  valuationPaise BigInt
+  locationId     String?
+  location       StorageLocation? @relation(fields: [locationId], references: [id])
+  girviLoan      GirviLoan        @relation(fields: [girviLoanId], references: [id], onDelete: Cascade)
+
+  @@index([girviLoanId])
+  @@index([locationId])
+}
+
+// ───────── Cash Flow (M18 & M19) ─────────
+model FundAccount {
+  id            String   @id @default(cuid())
+  shopId        String   @default("main")
+  name          String   @db.VarChar(80)
+  type          FundType
+  bankName      String?  @db.VarChar(80)
+  accountLast4  String?  @db.VarChar(4)
+  upiId         String?  @db.VarChar(80)
+  acceptsModes  Json
+  isDefaultUpi  Boolean  @default(false)
+  openingPaise  BigInt   @default(0)
+  openingDate   DateTime @db.Date
+  active        Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@index([type, active])
+}
+
+model CashCategory {
+  id                 String    @id @default(cuid())
+  shopId             String    @default("main")
+  name               String    @db.VarChar(60)
+  nameHi             String?   @db.VarChar(60)
+  group              CashGroup
+  direction          String    @db.VarChar(4)
+  parentId           String?
+  isSystem           Boolean   @default(false)
+  isPersonal         Boolean   @default(false)
+  pnl                String    @default("NONE") @db.VarChar(8)
+  monthlyBudgetPaise BigInt?
+  active             Boolean   @default(true)
+  sortOrder          Int       @default(0)
+
+  @@unique([shopId, name, parentId])
+}
+
+model CashCategoryMap {
+  id         String    @id @default(cuid())
+  refType    String    @db.VarChar(20)
+  direction  Direction
+  eventType  String?   @db.VarChar(24)
+  flowKind   FlowKind
+  categoryId String
+
+  @@unique([refType, direction, eventType])
+}
+
+model CashTxn {
+  id                  String    @id @default(cuid())
+  shopId              String    @default("main")
+  txnNo               String    @unique @db.VarChar(24)
+  businessDate        DateTime  @db.Date
+  direction           Direction
+  mode                PayMode
+  fundAccountId       String
+  amountPaise         BigInt
+  categoryId          String
+  labelId             String?
+  labelText           String    @db.VarChar(120)
+  partyType           String?   @db.VarChar(10)
+  partyId             String?
+  partyName           String?   @db.VarChar(120)
+  utr                 String?   @db.VarChar(40)
+  notes               String?   @db.VarChar(500)
+  attachmentFileIds   Json?
+  transferGroupId     String?   @db.VarChar(40)
+  source              TxnSource @default(MANUAL)
+  recurringTemplateId String?
+  suggestionMeta      Json?
+  status              String    @default("POSTED") @db.VarChar(10)
+  cancelledAt         DateTime?
+  cancelledById       String?
+  cancelReasonCode    String?   @db.VarChar(30)
+  cancelReason        String?   @db.VarChar(255)
+  version             Int       @default(1)
+  idempotencyKey      String    @unique @db.VarChar(64)
+  createdById         String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([businessDate, mode])
+  @@index([categoryId, businessDate])
+  @@index([labelId])
+  @@index([partyType, partyId])
+  @@index([utr])
+  @@index([transferGroupId])
+}
+
+model TxnLabel {
+  id                  String     @id @default(cuid())
+  shopId              String     @default("main")
+  key                 String     @db.VarChar(120)
+  displayName         String     @db.VarChar(120)
+  displayNameHi       String?    @db.VarChar(120)
+  defaultDirection    Direction?
+  defaultCategoryId   String?
+  defaultMode         PayMode?
+  defaultAccountId    String?
+  defaultPartyType    String?    @db.VarChar(10)
+  defaultPartyId      String?
+  useCount            Int        @default(0)
+  firstUsedAt         DateTime?
+  lastUsedAt          DateTime?
+  typicalAmountPaise  BigInt?
+  amountP25Paise      BigInt?
+  amountP75Paise      BigInt?
+  recentAmounts       Json?
+  categoryDist        Json?
+  modeDist            Json?
+  weekdayDist         Json?
+  hourDist            Json?
+  cadenceDays         Int?
+  cadenceConfidenceBp Int?
+  pinned              Boolean    @default(false)
+  active              Boolean    @default(true)
+  mergedIntoId        String?
+  createdById         String
+  createdAt           DateTime   @default(now())
+
+  @@unique([shopId, key])
+  @@index([lastUsedAt])
+  @@index([useCount])
+}
+
+model TxnLabelAlias {
+  id        String @id @default(cuid())
+  labelId   String
+  aliasKey  String @db.VarChar(120)
+  aliasText String @db.VarChar(120)
+  source    String @db.VarChar(10)
+
+  @@unique([aliasKey])
+  @@index([labelId])
+}
+
+model DailyCashSnapshot {
+  date             DateTime @db.Date
+  fundAccountId    String
+  openingPaise     BigInt
+  inPaise          BigInt
+  outPaise         BigInt
+  closingPaise     BigInt
+  cashInPaise      BigInt   @default(0)
+  cashOutPaise     BigInt   @default(0)
+  upiInPaise       BigInt   @default(0)
+  upiOutPaise      BigInt   @default(0)
+  bankInPaise      BigInt   @default(0)
+  bankOutPaise     BigInt   @default(0)
+  transferInPaise  BigInt   @default(0)
+  transferOutPaise BigInt   @default(0)
+  entries          Int      @default(0)
+  dayCloseStatus   String?  @db.VarChar(10)
+  computedAt       DateTime
+
+  @@id([date, fundAccountId])
+}
+
+// ───────── Payment Ledger (Append-Only Core) ─────────
+model Payment {
+  id             String      @id @default(cuid())
+  businessDate   DateTime    @db.Date
+  refType        PayRefType
+  refId          String      @db.VarChar(40)
+  direction      Direction
+  mode           PayMode
+  amountPaise    BigInt
+  fundAccountId  String?
+  flowKind       FlowKind?
+  categoryId     String?
+  cashTxnId      String?
+  utr            String?     @db.VarChar(40)
+  utrChecked     Boolean     @default(false)
+  utrCheckedAt   DateTime?
+  utrCheckedById String?
+  reversedOfId   String?
+  createdById    String
+  createdAt      DateTime    @default(now())
+
+  @@index([fundAccountId, businessDate])
+  @@index([flowKind, businessDate])
+  @@index([utr])
+}
+
+// ───────── Girvi Re-pledge & Custody (M20) ─────────
+model StorageLocation {
+  id             String       @id @default(cuid())
+  shopId         String       @default("main")
+  name           String       @db.VarChar(80)
+  type           LocationType
+  vendorId       String?
+  address        String?      @db.VarChar(255)
+  requiresPinIn  Boolean      @default(false)
+  requiresPinOut Boolean      @default(false)
+  isSystem       Boolean      @default(false)
+  active         Boolean      @default(true)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  girviItems     GirviItem[]
+
+  @@index([type, active])
+}
+
+model CustodyMovement {
+  id             String   @id @default(cuid())
+  shopId         String   @default("main")
+  girviId        String
+  itemIds        Json
+  fromLocationId String?
+  toLocationId   String
+  movedAt        DateTime @default(now())
+  businessDate   DateTime @db.Date
+  reasonCode     String   @db.VarChar(24)
+  refType        String?  @db.VarChar(20)
+  refId          String?  @db.VarChar(40)
+  byUserId       String
+  approvedById   String?
+  photoFileIds   Json?
+  note           String?  @db.VarChar(255)
+  reversedOfId   String?
+
+  @@index([girviId, movedAt])
+  @@index([toLocationId, movedAt])
+}
+
+model LocationAudit {
+  id            String   @id @default(cuid())
+  locationId    String
+  startedAt     DateTime @default(now())
+  closedAt      DateTime?
+  byUserId      String
+  expectedCount Int      @default(0)
+  foundCount    Int      @default(0)
+  missingCount  Int      @default(0)
+  extraCount    Int      @default(0)
+  status        String   @default("OPEN") @db.VarChar(10)
+  note          String?  @db.VarChar(255)
+  lines         LocationAuditLine[]
+}
+
+model LocationAuditLine {
+  id       String        @id @default(cuid())
+  auditId  String
+  girviId  String
+  expected Boolean
+  found    Boolean
+  note     String?       @db.VarChar(255)
+  audit    LocationAudit @relation(fields: [auditId], references: [id])
+
+  @@index([auditId])
+}
+
+model RepledgeLoan {
+  id                  String          @id @default(cuid())
+  shopId              String          @default("main")
+  loanNo              String          @unique @db.VarChar(24)
+  vendorId            String
+  termsId             String?
+  vendorRefNo         String?         @db.VarChar(40)
+  vendorReceiptFileId String?
+  date                DateTime?       @db.Date
+  principalPaise      BigInt
+  metal               Metal
+  offeredTotalPaise   BigInt?
+  receivedPaise       BigInt?
+  deductionPaise      BigInt          @default(0)
+  interestType        InterestType
+  rateBp              Int
+  ratePeriod          RatePeriod
+  compounding         Compounding?
+  partialRule         PartialRule     @default(PRORATA_DAYS)
+  minMonths           Int             @default(1)
+  allocation          AllocationOrder @default(INTEREST_FIRST)
+  processingFeePaise  BigInt          @default(0)
+  dueDate             DateTime?       @db.Date
+  packetSealNo        String?         @db.VarChar(30)
+  status              RepledgeStatus  @default(PLANNED)
+  renewedFromId       String?
+  closedAt            DateTime?
+  notes               String?         @db.Text
+  createdById         String
+  createdAt           DateTime        @default(now())
+  links               RepledgeLink[]
+  events              RepledgeEvent[]
+
+  @@index([vendorId, status])
+  @@index([dueDate, status])
+}
+
+model RepledgeLink {
+  id                      String       @id @default(cuid())
+  loanId                  String
+  girviId                 String
+  itemIds                 Json
+  weightNetMg             Int
+  weightFineMg            Int
+  valuePaise              BigInt
+  offeredPaise            BigInt
+  allocatedPrincipalPaise BigInt
+  allocationBasis         String       @db.VarChar(8)
+  vendorGirviRef          String?      @db.VarChar(40)
+  sentOn                  DateTime?    @db.Date
+  returnedOn              DateTime?    @db.Date
+  status                  String       @default("PLANNED") @db.VarChar(10)
+  recallStatus            RecallStatus?
+  recallRequestedAt       DateTime?
+  recallReceivedAt        DateTime?
+  loan                    RepledgeLoan @relation(fields: [loanId], references: [id])
+
+  @@unique([loanId, girviId])
+  @@index([girviId, status])
+}
+
+model RepledgeEvent {
+  id           String            @id @default(cuid())
+  loanId       String
+  type         RepledgeEventType
+  amountPaise  BigInt            @default(0)
+  date         DateTime          @db.Date
+  paymentId    String?
+  linkIds      Json?
+  note         String?           @db.VarChar(255)
+  reversedOfId String?
+  byUserId     String
+  at           DateTime          @default(now())
+  loan         RepledgeLoan      @relation(fields: [loanId], references: [id])
+
+  @@index([loanId, date])
+}
+
+model RepledgeSettlement {
+  id                   String   @id @default(cuid())
+  voucherNo            String   @unique @db.VarChar(24)
+  loanId               String
+  vendorId             String
+  settledOn            DateTime @db.Date
+  sequence             String   @db.VarChar(16)
+  systemPayablePaise   BigInt
+  vendorAskingPaise    BigInt?
+  varianceReason       String?  @db.VarChar(255)
+  varianceApprovedById String?
+  paidPaise            BigInt
+  mode                 PayMode
+  fundAccountId        String?
+  paymentIds           Json?
+  collectedByName      String?  @db.VarChar(80)
+  collectedByPhone     String?  @db.VarChar(15)
+  collectedAt          DateTime?
+  sealNo               String?  @db.VarChar(30)
+  vendorReceiptFileIds Json?
+  status               String   @default("DRAFT") @db.VarChar(10)
+  createdById          String
+  createdAt            DateTime @default(now())
+  lines                RepledgeSettlementLine[]
+
+  @@index([loanId, settledOn])
+}
+
+model RepledgeSettlementLine {
+  id              String             @id @default(cuid())
+  settlementId    String
+  girviId         String
+  linkId          String
+  principalPaise  BigInt
+  interestPaise   BigInt
+  chargePaise     BigInt             @default(0)
+  adjustmentPaise BigInt             @default(0)
+  totalPaise      BigInt
+  weightCheckOk   Boolean?
+  weightNote      String?            @db.VarChar(255)
+  receivedAt      DateTime?
+  receivedById    String?
+  settlement      RepledgeSettlement @relation(fields: [settlementId], references: [id])
+
+  @@index([settlementId])
+}
+
+// ───────── Tagging System (M22) ─────────
+model TagDef {
+  id            String      @id @default(cuid())
+  code          String      @unique @db.VarChar(40)
+  nameEn        String      @db.VarChar(60)
+  nameHi        String?     @db.VarChar(60)
+  colorHex      String      @default("#6366F1") @db.VarChar(7)
+  icon          String?     @db.VarChar(30)
+  group         String      @default("CUSTOM") @db.VarChar(30) // SYSTEM, CUSTOMER, GIRVI, CASHBOOK, INVENTORY
+  isAuto        Boolean     @default(false)
+  effect        String      @default("NONE") @db.VarChar(30) // NONE, BLOCK_RELEASE, WARN_DISPUTE
+  permission    String      @default("ALL") @db.VarChar(20)  // ALL, MANAGER, OWNER
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  entityTags    EntityTag[]
+}
+
+model EntityTag {
+  id              String    @id @default(cuid())
+  entityType      String    @db.VarChar(30) // CUSTOMER, GIRVI_LOAN, GIRVI_ITEM, CASH_TXN, SALE, VENDOR
+  entityId        String    @db.VarChar(40)
+  tagId           String
+  isAuto          Boolean   @default(false)
+  appliedByUserId String?
+  reason          String?   @db.VarChar(255)
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  tag             TagDef    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([entityType, entityId, tagId])
+  @@index([entityType, entityId])
+  @@index([tagId])
+}
+
+model SmartList {
+  id                 String   @id @default(cuid())
+  name               String   @db.VarChar(80)
+  icon               String?  @db.VarChar(30)
+  entityType         String   @db.VarChar(30)
+  tagIds             Json?
+  queryCriteria      Json?
+  pinnedToDashboard Boolean  @default(false)
+  createdById        String
+  createdAt          DateTime @default(now())
+}
+
+// ───────── Suggestion Calculators & Analytics (M21 & M23) ─────────
+model SuggestionLog {
+  id                   String   @id @default(cuid())
+  calculatorType       String   @db.VarChar(40) // LENDING_ADVISOR, REDEMPTION_ADVISOR, REPLEDGE_ADVISOR
+  entityId             String?  @db.VarChar(40)
+  inputsJson           Json
+  suggestedValuePaise  BigInt
+  acceptedValuePaise   BigInt
+  varianceReason       String?  @db.VarChar(255)
+  byUserId             String
+  createdAt            DateTime @default(now())
+
+  @@index([calculatorType, createdAt])
+}
+
+model AnalyticsSnapshot {
+  date           DateTime @db.Date
+  metricId       String   @db.VarChar(60)
+  dimensionKey   String   @default("GLOBAL") @db.VarChar(40)
+  dimensionValue String   @default("ALL") @db.VarChar(80)
+  valuePaise     BigInt   @default(0)
+  valueNumber    Float    @default(0)
+  computedAt     DateTime @updatedAt
+
+  @@id([date, metricId, dimensionKey, dimensionValue])
+  @@index([metricId, date])
+}
+
+model IdentityRequirementProfile {
+  id                   String   @id @default(cuid())
+  moduleId             String   @db.VarChar(20)
+  field                String   @db.VarChar(40)
+  level                String   @db.VarChar(10)
+  amountThresholdPaise BigInt?
+  updatedById          String
+  updatedAt            DateTime @updatedAt
+
+  @@unique([moduleId, field])
+}
+
+model DuplicateDecision {
+  id                  String   @id @default(cuid())
+  newCustomerId       String
+  candidateCustomerId String
+  matchScoreBp        Int
+  decision            String   @db.VarChar(12)
+  byUserId            String
+  at                  DateTime @default(now())
+
+  @@index([newCustomerId])
+}
+
+// ───────── Document 11: Purchase Lots & Rate-Open Credit ─────────
+enum PurchaseBasis {
+  RUPEE_FIXED
+  RATE_OPEN
+  METAL_ACCOUNT
+}
+
+model PurchaseLot {
+  id                   String        @id @default(cuid())
+  vendorId             String        @db.VarChar(40)
+  vendorInvoiceNo      String?       @db.VarChar(40)
+  basis                PurchaseBasis @default(RATE_OPEN)
+  totalFineMg          Int
+  openFineMg           Int
+  provisionalRatePaise BigInt
+  provisionalValuePaise BigInt
+  status               String        @default("RATE_OPEN") @db.VarChar(24) // RATE_OPEN, PARTLY_FIXED, FIXED, PAID
+  dueDate              DateTime?     @db.Date
+  rateMode             RateMode      @default(LOCKED_AT_SALE)
+  queuedAt             DateTime?
+  settledAt            DateTime?
+  settledRatePaisePerGram BigInt?
+  settledById          String?
+  memoInLineId         String?
+  createdById          String
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  rateFixEvents        RateFixEvent[]
+
+  @@index([vendorId, status])
+}
+
+model RateFixEvent {
+  id                   String      @id @default(cuid())
+  purchaseLotId        String
+  fineMgFixed          Int
+  fixedRatePaise       BigInt
+  metalValuePaise      BigInt
+  gstPaise             BigInt      @default(0)
+  costRevisionBatchId  String?     @db.VarChar(40)
+  note                 String?     @db.Text
+  byUserId             String
+  createdAt            DateTime    @default(now())
+  purchaseLot          PurchaseLot @relation(fields: [purchaseLotId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseLotId])
+}
+
+model ItemCostRevision {
+  id            String   @id @default(cuid())
+  itemId        String   @db.VarChar(40)
+  batchId       String   @db.VarChar(40)
+  sourceEventId String?  @db.VarChar(40)
+  oldMetalRate  BigInt
+  newMetalRate  BigInt
+  oldMetalCost  BigInt
+  newMetalCost  BigInt
+  deltaPaise    BigInt
+  reason        String   @db.VarChar(255)
+  byUserId      String
+  createdAt     DateTime @default(now())
+
+  @@index([itemId])
+  @@index([batchId])
+}
+
+// ───────── Document 11: Multi-Tranche Girvi & Partial Release ─────────
+model GirviTranche {
+  id                 String    @id @default(cuid())
+  girviId            String    @db.VarChar(40)
+  seqNo              Int       @default(1)
+  kind               String    @default("ORIGINAL") @db.VarChar(20) // ORIGINAL, TOPUP, METAL_SPLIT, RENEWAL
+  principalOpenPaise BigInt
+  interestType       String    @default("SIMPLE") @db.VarChar(16) // SIMPLE, COMPOUND
+  ratePerMonthPct    Decimal   @default(1.50) @db.Decimal(5, 2)
+  compounding        String    @default("MONTHLY") @db.VarChar(16)
+  startDate          DateTime  @db.Date
+  dueDate            DateTime? @db.Date
+  status             String    @default("OPEN") @db.VarChar(12) // OPEN, CLOSED
+  closedAt           DateTime?
+  createdAt          DateTime  @default(now())
+
+  @@index([girviId, status])
+}
+
+model PartialReleaseBatch {
+  id                     String    @id @default(cuid())
+  girviId                String    @db.VarChar(40)
+  batchNo                String    @db.VarChar(24)
+  articleIdsJson         Json
+  state                  String    @default("PAID_AWAITING_RELEASE") @db.VarChar(30)
+  minPrincipalToPayPaise BigInt    @default(0)
+  collectorName          String?   @db.VarChar(120)
+  collectorRelation      String?   @db.VarChar(40)
+  collectorIdType        String?   @db.VarChar(30)
+  deliveredAt            DateTime?
+  deliveredById          String?
+  createdAt              DateTime  @default(now())
+
+  @@index([girviId])
+}
+
+model PaymentAllocation {
+  id             String   @id @default(cuid())
+  paymentId      String   @db.VarChar(40)
+  girviId        String   @db.VarChar(40)
+  trancheId      String?  @db.VarChar(40)
+  interestPaise  BigInt   @default(0)
+  principalPaise BigInt   @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([paymentId])
+  @@index([girviId])
+}
+
+// ───────── Module 12: Item Weight Revisions & Loose Stones (M28) ─────────
+model ItemWeightRevision {
+  id             String   @id @default(cuid())
+  inventoryItemId String
+  oldNetMg       Int
+  newNetMg       Int
+  reason         String   @db.VarChar(120)
+  byUserId       String
+  rateSnapshotId String?
+  at             DateTime @default(now())
+
+  @@index([inventoryItemId])
+}
+
+model StoneItem {
+  id               String   @id @default(cuid())
+  inventoryItemId  String
+  stoneType        String   @db.VarChar(40)
+  subType          String?  @db.VarChar(40)
+  weightMg         Int // display as carat/ratti in UI
+  origin           String?  @db.VarChar(60)
+  treatment        String?  @db.VarChar(60)
+  certNo           String?  @db.VarChar(40)
+  certLabId        String?
+  colour           String?  @db.VarChar(30)
+  clarity          String?  @db.VarChar(20)
+  shape            String?  @db.VarChar(30)
+  planetAttr       String?  @db.VarChar(30)
+  rashiAttr        String?  @db.VarChar(30)
+  costPaise        BigInt?
+  listPaise        BigInt?
+  customerSupplied Boolean  @default(false)
+
+  @@index([inventoryItemId])
+}
+
+// ───────── Module 13: Wholesaler Memo-In & Approval Stock (M35-M37) ─────────
+model MemoIn {
+  id                 String       @id @default(cuid())
+  shopId             String       @default("main")
+  wholesalerVendorId String
+  wholesalerMemoNo   String?      @db.VarChar(40)
+  shopMemoNo         String       @unique @db.VarChar(24)
+  receivedOn         DateTime     @db.Date
+  returnByDate       DateTime     @db.Date
+  notes              String?      @db.Text
+  status             String       @default("OPEN") @db.VarChar(10) // OPEN | CLOSED
+  idempotencyKey     String       @unique @db.VarChar(64)
+  createdById        String
+  createdAt          DateTime     @default(now())
+  lines              MemoInLine[]
+
+  @@index([wholesalerVendorId, status])
+}
+
+model MemoInLine {
+  id                         String         @id @default(cuid())
+  memoInId                   String
+  category                   String         @db.VarChar(40)
+  metal                      Metal
+  statedPurityPpt            Int
+  testedPurityPpt            Int?
+  testMethod                 String?        @db.VarChar(16)
+  grossMg                    Int
+  stoneMg                    Int            @default(0)
+  netMg                      Int
+  qty                        Int            @default(1)
+  touchPpt                   Int // stored as basis points, e.g. 830 = 83.0%
+  touchSource                String         @db.VarChar(10) // SCHEDULE | OVERRIDE
+  alterPolicy                AlterPolicy    @default(ALTER_NONE)
+  photoFileIds               Json?
+  status                     MemoLineStatus @default(RECEIVED)
+  heldForCustomerId          String?
+  expectedDecisionOn         DateTime?      @db.Date
+  inventoryItemId            String?
+  convertedSaleId            String?
+  convertedPurchaseInvoiceId String?
+  lossSettlementId           String?
+  byUserId                   String
+  createdAt                  DateTime       @default(now())
+  memoIn                     MemoIn         @relation(fields: [memoInId], references: [id])
+
+  @@index([memoInId, status])
+}
+
+model TouchSchedule {
+  id                 String   @id @default(cuid())
+  wholesalerVendorId String
+  metal              Metal
+  purityBandLabel    String   @db.VarChar(20) // '18K/750', '75-80% silver'
+  purityPptMin       Int
+  purityPptMax       Int
+  category           String?  @db.VarChar(40) // null = applies to all categories
+  touchPptDefault    Int
+  touchPptMin        Int?
+  touchPptMax        Int?
+  effectiveFrom      DateTime @db.Date
+  note               String?  @db.VarChar(200)
+  setById            String
+  createdAt          DateTime @default(now())
+
+  @@index([wholesalerVendorId, metal, effectiveFrom])
+}
+
+model LossSettlement {
+  id                         String   @id @default(cuid())
+  memoInLineId               String   @unique
+  wholesalerVendorId         String
+  settlementRatePaisePerGram BigInt
+  payablePaise               BigInt
+  reasonCode                 String   @db.VarChar(20)
+  note                       String?  @db.VarChar(255)
+  insuranceClaimRef          String?  @db.VarChar(60)
+  byUserId                   String
+  at                         DateTime @default(now())
+}
+
+
+
+
