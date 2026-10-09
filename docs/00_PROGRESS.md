@@ -9,6 +9,8 @@
 | 2026-09-28 | Configurable GST toggle (`gstEnabled` setting + `Sale.gstEnabled` snapshot column): allows turning GST calculation ON/OFF shop-wide | 01, 02, 03 |
 | 2026-09-28 | In-app direct WebP image upload pipeline (quality 0.92) & deterministic naming algorithm `{KIND}_{DATE}_{HASH}_{CUID}.webp` | 01, 02, 03 |
 | 2026-10-09 | Module 12 & 13 Integration: RateSnapshot versioning, ActivityLog SHA-256 chain, Alert Engine, C-122 MultiSelectList, ItemClass/TrackingMode, Wholesaler Memo-In & Settlement Queue | 12, 13, 03 |
+| 2026-10-09 | GitHub repo created & synced: https://github.com/sunserviceandtravels22-debug/njms | 00_PROGRESS |
+| 2026-10-09 | Hostinger MariaDB (srv2209.hstgr.io:3306/u148306822_njms) live verified: 54 tables created via `prisma db push`, initial seed executed (Owner user, fund accounts, cash categories, storage locations) | HOSTINGER_DEPLOYMENT_GUIDE |
 | | Girvi compounding convention (periods restart at each payment): **pending owner confirmation** | 03 §8.4 |
 
 ## Open questions (from PRD §9)
