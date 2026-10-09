@@ -2,16 +2,22 @@
   "name": "njms",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=18.17.0"
+  },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "build": "prisma generate && next build",
+    "start": "node server.js",
+    "start:next": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
+    "deploy:hostinger": "npm run build && echo 'Build complete. Upload .next, server.js, package.json, prisma/ to Hostinger.'",
     "postinstall": "prisma generate"
   },
   "prisma": {

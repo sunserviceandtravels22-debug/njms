@@ -1,7 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
+
+  // Required for Hostinger Node.js deployment — bundles everything into .next/standalone
+  output: 'standalone',
+
+  // Prevent Prisma Client from being bundled into the client bundle
+  // It must only run server-side
+  experimental: {
+    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs'],
+  },
+
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
   // Security headers per TECH §10
   async headers() {
     return [
