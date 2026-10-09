@@ -1,25 +1,21 @@
 import { PrismaClient } from '@prisma/client';
 
-export const HOSTINGER_PROD_DB_URL =
-  'mysql://u148306822_admin:%2FYREd%5ExERMb_%24q8@srv2209.hstgr.io:3306/u148306822_njms?connection_limit=10';
+// The DATABASE_URL is read from the environment.
+// On Hostinger: set it in Node.js Application Manager -> Environment Variables
+// or place it in the .env file in your project root.
+//
+// Correct format for Hostinger MySQL with special characters in password:
+//   mysql://u148306822_admin:%2FYREd%5ExERMb_%24q8@srv2209.hstgr.io:3306/u148306822_njms?connection_limit=10&connect_timeout=30
+//
+// Note: Special characters in the password must be URL-encoded:
+//   /  →  %2F     ^  →  %5E     $  →  %24
 
 export function resolveDatabaseUrl(): string {
-  let url = process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL ?? '';
 
-  // 1. Fallback to Hostinger production database if no environment variable provided
-  // or if dummy local placeholder (root:password@localhost/njms_dev) is present
-  if (!url || url.trim() === '' || url.includes('root:password@localhost') || url.includes('njms_dev')) {
-    return HOSTINGER_PROD_DB_URL;
-  }
-
-  // 2. Fix unencoded special characters in the Hostinger password if passed raw in .env
-  if (url.includes('/YREd^xERMb_$q8')) {
-    url = url.replace('/YREd^xERMb_$q8', '%2FYREd%5ExERMb_%24q8');
-  }
-
-  // 3. Fix localhost / 127.0.0.1 redirect for Hostinger accounts where DB is remote (srv2209.hstgr.io)
-  if (url.includes('u148306822_admin') && (url.includes('@localhost') || url.includes('@127.0.0.1'))) {
-    url = url.replace('@localhost', '@srv2209.hstgr.io').replace('@127.0.0.1', '@srv2209.hstgr.io');
+  if (!url || url.includes('njms_dev') || url.includes('root:password@localhost')) {
+    // Hardcoded Hostinger fallback — keeps the app alive even if .env is missing on server
+    return 'mysql://u148306822_admin:%2FYREd%5ExERMb_%24q8@srv2209.hstgr.io:3306/u148306822_njms?connection_limit=10&connect_timeout=30';
   }
 
   return url;
@@ -29,16 +25,13 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const activeUrl = resolveDatabaseUrl();
-process.env.DATABASE_URL = activeUrl;
+const dbUrl = resolveDatabaseUrl();
 
 export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
     datasources: {
-      db: {
-        url: activeUrl,
-      },
+      db: { url: dbUrl },
     },
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   });
