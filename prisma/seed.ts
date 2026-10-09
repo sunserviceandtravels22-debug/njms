@@ -139,29 +139,34 @@ async function main() {
 
   for (let i = 0; i < defaultCategories.length; i++) {
     const cat = defaultCategories[i];
-    await prisma.cashCategory.upsert({
+    const existing = await prisma.cashCategory.findFirst({
       where: {
-        shopId_name_parentId: {
-          shopId: 'main',
-          name: cat.name,
-          parentId: null as any,
-        },
-      },
-      update: {
-        nameHi: cat.nameHi,
-      },
-      create: {
         shopId: 'main',
         name: cat.name,
-        nameHi: cat.nameHi,
-        group: cat.group,
-        direction: cat.direction,
-        isSystem: cat.isSystem || false,
-        isPersonal: cat.isPersonal || false,
-        pnl: cat.pnl || 'NONE',
-        sortOrder: i + 1,
+        parentId: null,
       },
     });
+
+    if (existing) {
+      await prisma.cashCategory.update({
+        where: { id: existing.id },
+        data: { nameHi: cat.nameHi },
+      });
+    } else {
+      await prisma.cashCategory.create({
+        data: {
+          shopId: 'main',
+          name: cat.name,
+          nameHi: cat.nameHi,
+          group: cat.group,
+          direction: cat.direction,
+          isSystem: cat.isSystem || false,
+          isPersonal: cat.isPersonal || false,
+          pnl: cat.pnl || 'NONE',
+          sortOrder: i + 1,
+        },
+      });
+    }
   }
 
   // 3. Default Storage Locations for Girvi & Custody
