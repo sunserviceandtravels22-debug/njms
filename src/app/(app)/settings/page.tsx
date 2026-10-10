@@ -27,6 +27,30 @@ export default function SettingsPage() {
 
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Load settings from DB on mount
+  useEffect(() => {
+    fetch('/api/v1/settings', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((res) => {
+        const s = res.settings || {};
+        if (s['shop.name']) setShopName(s['shop.name']);
+        if (s['shop.address']) setAddress(s['shop.address']);
+        if (s['shop.phone']) setPhone(s['shop.phone']);
+        if (s['shop.gstin']) setGstin(s['shop.gstin']);
+        if (s['gst.settings']) {
+          const g = s['gst.settings'];
+          if (g.enabled !== undefined) setGstEnabled(g.enabled);
+          if (g.jewelleryBp) setJewelleryGstBp(g.jewelleryBp);
+          if (g.makingBp) setMakingGstBp(g.makingBp);
+        }
+        if (s['girvi.goldInterestBp']) setGoldInterestBp(Number(s['girvi.goldInterestBp']));
+        if (s['girvi.silverInterestBp']) setSilverInterestBp(Number(s['girvi.silverInterestBp']));
+        if (s['girvi.ltvLimitBp']) setLtvLimitBp(Number(s['girvi.ltvLimitBp']));
+      })
+      .catch(() => setLoadError('Could not load settings from server'));
+  }, []);
 
   const currentFormData = {
     shopName,
@@ -68,20 +92,28 @@ export default function SettingsPage() {
     setMsg(null);
 
     try {
-      await fetch('/api/v1/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          key: 'gst.settings',
-          value: {
-            enabled: gstEnabled,
-            jewelleryBp: jewelleryGstBp,
-            makingBp: makingGstBp,
-          },
-        }),
-      });
+      // Save all settings to DB
+      const puts = [
+        { key: 'shop.name', value: shopName },
+        { key: 'shop.address', value: address },
+        { key: 'shop.phone', value: phone },
+        { key: 'shop.gstin', value: gstin },
+        { key: 'gst.settings', value: { enabled: gstEnabled, jewelleryBp: jewelleryGstBp, makingBp: makingGstBp } },
+        { key: 'girvi.goldInterestBp', value: goldInterestBp },
+        { key: 'girvi.silverInterestBp', value: silverInterestBp },
+        { key: 'girvi.ltvLimitBp', value: ltvLimitBp },
+      ];
 
-      setMsg('Settings saved successfully!');
+      for (const entry of puts) {
+        await fetch('/api/v1/settings', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entry),
+        });
+      }
+
+      setMsg('Settings saved to database!');
       await discardDraft();
     } catch {
       setMsg('Failed to save settings.');
@@ -107,9 +139,17 @@ export default function SettingsPage() {
         <SaveIndicator status={saveStatus} />
       </div>
 
+      {loadError && (
+        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs font-medium">
+          ⚠️ {loadError} — showing defaults
+        </div>
+      )}
+
       {msg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg text-xs font-medium flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <div className={`p-3 border rounded-lg text-xs font-medium flex items-center gap-2 ${
+          msg.includes('Failed') ? 'bg-red-50 border-red-200 text-red-800' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+        }`}>
+          {msg.includes('Failed') ? <AlertCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
           {msg}
         </div>
       )}
