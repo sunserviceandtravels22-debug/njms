@@ -349,11 +349,11 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
             { href: '/pos', icon: ShoppingBag, label: 'Counter POS', color: 'text-primary' },
-            { href: '/inventory/wholesaler-approval', icon: Clock, label: 'Memo-In Stock', color: 'text-indigo-600' },
+            { href: '/memo-in', icon: Clock, label: 'Memo-In Stock', color: 'text-indigo-600' },
             { href: '/girvi', icon: ShieldCheck, label: 'New Girvi', color: 'text-amber-600' },
-            { href: '/exchange', icon: ArrowLeftRight, label: 'Exchange Gold', color: 'text-emerald-600' },
+            { href: '/old-gold', icon: ArrowLeftRight, label: 'Exchange Gold', color: 'text-emerald-600' },
             { href: '/barcode', icon: BarcodeIcon, label: 'Barcode Studio', color: 'text-violet-600' },
-            { href: '/inventory/settlement-queue', icon: CheckCircle2, label: 'Settle Queue', color: 'text-rose-600' },
+            { href: '/settlement-queue', icon: CheckCircle2, label: 'Settle Queue', color: 'text-rose-600' },
           ].map(({ href, icon: Icon, label, color }) => (
             <a key={href} href={href} className="p-3 bg-surface-2 hover:bg-border rounded-xl text-center text-xs font-semibold text-text flex items-center justify-center gap-2 transition-all">
               <Icon className={`w-4 h-4 ${color}`} />
