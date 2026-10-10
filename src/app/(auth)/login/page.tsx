@@ -10,8 +10,8 @@ import { Field } from '@/components/ui/Field';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('owner');
-  const [password, setPassword] = useState('OwnerSecurePassword123!');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [requires2FA, setRequires2FA] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,28 +26,30 @@ export default function LoginPage() {
       const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ username, password, totpCode }),
       });
 
       const data = await res.json();
 
       if (res.status === 402) {
-        // 2FA required
+        // 2FA required — show the TOTP input
         setRequires2FA(true);
         setLoading(false);
         return;
       }
 
       if (!res.ok) {
-        setError(data.message || 'Login failed');
+        setError(data.message || 'Login failed. Check your username and password.');
         setLoading(false);
         return;
       }
 
+      // Login successful — session cookie is set by the server
       router.push('/dashboard');
-    } catch {
-      // If DB is offline, bypass directly to dashboard for demo preview
-      router.push('/dashboard');
+    } catch (err) {
+      setError('Cannot connect to server. Please check your internet connection and try again.');
+      setLoading(false);
     }
   };
 
@@ -63,7 +65,7 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs font-medium">
+          <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs font-medium">
             {error}
           </div>
         )}
@@ -81,6 +83,7 @@ export default function LoginPage() {
                     onChange={(e) => setUsername(e.target.value)}
                     className="w-full pl-10 pr-3 py-2.5 border border-border rounded-lg bg-bg text-sm focus:ring-2 focus:ring-primary focus:outline-none"
                     placeholder="Enter username"
+                    autoComplete="username"
                   />
                 </div>
               </Field>
@@ -95,6 +98,7 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-10 pr-3 py-2.5 border border-border rounded-lg bg-bg text-sm focus:ring-2 focus:ring-primary focus:outline-none"
                     placeholder="Enter password"
+                    autoComplete="current-password"
                   />
                 </div>
               </Field>
@@ -119,12 +123,19 @@ export default function LoginPage() {
           )}
 
           <Button type="submit" loading={loading} className="w-full mt-2">
-            {requires2FA ? 'Verify 2FA & Sign In' : 'Sign In / Enter App'}
+            {requires2FA ? 'Verify 2FA & Sign In' : 'Sign In'}
           </Button>
 
-          <Button type="button" variant="secondary" onClick={() => router.push('/dashboard')} className="w-full mt-2">
-            Bypass Login & Open App
-          </Button>
+          {requires2FA && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => { setRequires2FA(false); setTotpCode(''); }}
+              className="w-full"
+            >
+              ← Back
+            </Button>
+          )}
         </form>
 
         <div className="pt-4 border-t border-border text-center text-xs text-text-muted">

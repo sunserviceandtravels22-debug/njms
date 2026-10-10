@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { GlobalSearchModal } from '../search/GlobalSearchModal';
 import {
   Home,
@@ -40,9 +40,18 @@ export const AppShell: React.FC<AppShellProps> = ({
   children,
 }) => {
   const pathname = usePathname();
+  const router = useRouter();
   const [lang, setLang] = useState<'en' | 'hi'>('en');
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
+    } finally {
+      router.push('/login');
+    }
+  };
 
   // Global Cmd+K / Ctrl+K shortcut
   useEffect(() => {
@@ -133,13 +142,22 @@ export const AppShell: React.FC<AppShellProps> = ({
             <div className="font-semibold text-text">{userName}</div>
             <div className="text-text-muted">{userRole}</div>
           </div>
-          <button
-            onClick={toggleLanguage}
-            className="flex items-center gap-1 px-2.5 py-1 bg-surface border border-border rounded font-semibold text-text hover:bg-bg"
-          >
-            <Globe className="w-3.5 h-3.5" />
-            {lang.toUpperCase()}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={toggleLanguage}
+              className="flex items-center gap-1 px-2.5 py-1 bg-surface border border-border rounded font-semibold text-text hover:bg-bg"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              {lang.toUpperCase()}
+            </button>
+            <button
+              onClick={handleLogout}
+              title="Logout"
+              className="flex items-center gap-1 px-2 py-1 bg-surface border border-border rounded text-red-600 hover:bg-red-50"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </aside>
 
