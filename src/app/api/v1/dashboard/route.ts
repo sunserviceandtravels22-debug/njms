@@ -62,8 +62,12 @@ export async function GET(req: NextRequest) {
 
     let vaultValuePaise = BigInt(0);
     let totalStockCount = 0;
+    let totalGoldWeightMg = 0;
+    let totalSilverWeightMg = 0;
     for (const item of stockItems) {
       totalStockCount += item.quantity;
+      if (item.metal === 'GOLD') totalGoldWeightMg += item.netWeightMg;
+      else if (item.metal === 'SILVER') totalSilverWeightMg += item.netWeightMg;
       const rate = item.metal === 'GOLD' ? goldRate24 : silverRate;
       const fineMg = BigInt(Math.round((item.netWeightMg * item.purityPpt) / 1000));
       vaultValuePaise += (fineMg * rate) / BigInt(1000);
@@ -145,6 +149,8 @@ export async function GET(req: NextRequest) {
         girviCount: girviActive._count._all,
         vaultValuePaise: vaultValuePaise.toString(),
         totalStockCount,
+        totalGoldWeightGrams: (totalGoldWeightMg / 1000).toFixed(2),
+        totalSilverWeightGrams: (totalSilverWeightMg / 1000).toFixed(2),
         totalCustomers: recentCustomerCount,
         salesTrend,
         categoryData,

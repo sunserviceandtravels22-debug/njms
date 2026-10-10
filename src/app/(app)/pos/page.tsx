@@ -14,7 +14,11 @@ import {
   Sparkles,
   ArrowDownUp,
   Percent,
-  Scale
+  Scale,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Monitor,
 } from 'lucide-react';
 import { calculateProfit, ProfitCalculation } from '@/lib/sales/calculations';
 import { CustomerOmniSelector, CustomerOmniData } from '@/components/customers/CustomerOmniSelector';
@@ -65,6 +69,7 @@ export default function PosPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationData, setConfirmationData] = useState<any | null>(null);
+  const [isCustomerView, setIsCustomerView] = useState(false);
 
   // Fetch live daily rates on mount
   useEffect(() => {
@@ -431,12 +436,14 @@ export default function PosPage() {
                     +₹{selectedItem.totalMakingRupees.toLocaleString('en-IN')}
                   </span>
                 </div>
-                <div className="flex justify-between items-center opacity-60">
-                  <span className="text-text-muted font-medium">Wholesale Cost Basis</span>
-                  <span className="font-semibold text-text font-mono">
-                    ₹{selectedItem.purchasePriceRupees.toLocaleString('en-IN')}
-                  </span>
-                </div>
+                {!isCustomerView && (
+                  <div className="flex justify-between items-center opacity-60">
+                    <span className="text-text-muted font-medium">Wholesale Cost Basis</span>
+                    <span className="font-semibold text-text font-mono">
+                      ₹{selectedItem.purchasePriceRupees.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -466,12 +473,42 @@ export default function PosPage() {
           {/* Settlement Form, Exchange Card & Profit Math */}
           <div className="lg:col-span-7 bg-surface p-6 sm:p-8 rounded-2xl border border-primary/30 shadow-md space-y-6 flex flex-col justify-between">
             <div className="space-y-6">
-              <div className="flex justify-between items-center border-b border-border pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
                 <div>
                   <h3 className="text-xl font-extrabold text-text tracking-tight">Settlement Terminal</h3>
-                  <p className="text-xs text-text-muted">Agreed Value & Real-time Profitability Metrics</p>
+                  <p className="text-xs text-text-muted">
+                    {isCustomerView ? 'Customer Showcase Mode • Margins Concealed' : 'Agreed Value & Real-time Profitability Metrics'}
+                  </p>
                 </div>
-                <span className="px-3 py-1 bg-primary text-white rounded-lg text-xs font-bold uppercase">POS Mode</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerView(!isCustomerView)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                      isCustomerView
+                        ? 'bg-amber-500 text-stone-950 shadow-md font-extrabold ring-2 ring-amber-400'
+                        : 'bg-surface-2 hover:bg-border text-text border border-border'
+                    }`}
+                    title={isCustomerView ? 'Switch back to Staff POS Mode' : 'Flip view to Customer (Hides Cost Basis & Profit)'}
+                  >
+                    {isCustomerView ? (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5" />
+                        <span>Staff Mode</span>
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Flip to Customer</span>
+                      </>
+                    )}
+                  </button>
+                  <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase ${
+                    isCustomerView ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-primary text-white'
+                  }`}>
+                    {isCustomerView ? 'Customer View' : 'POS Mode'}
+                  </span>
+                </div>
               </div>
 
               {/* Selling Price Input */}
@@ -688,8 +725,8 @@ export default function PosPage() {
                 </div>
               )}
 
-              {/* Live Profit Analysis Box */}
-              {stats && (
+              {/* Live Profit Analysis Box (Staff Mode) */}
+              {!isCustomerView && stats && (
                 <div className={`p-5 rounded-2xl border ${getStatusColor(stats.status)} space-y-3`}>
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-bold uppercase tracking-wider">
@@ -707,6 +744,31 @@ export default function PosPage() {
                     <div className="p-2.5 bg-white/40 rounded-xl border border-current/10">
                       <span className="text-[10px] font-bold uppercase block opacity-70">Portfolio Margin</span>
                       <span className="text-base font-extrabold">{stats.profitMargin.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Customer View Purity & Authenticity Card */}
+              {isCustomerView && (
+                <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-amber-600" />
+                    <span className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                      BIS Certified Purity & Authenticity Guarantee
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-muted leading-relaxed">
+                    Certified hallmark guarantee with laser HUID traceability, precise digital triple-weight deduction, and transparent live board rates.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] font-bold text-amber-900">
+                    <div className="p-2.5 bg-surface rounded-xl border border-amber-500/20 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>100% Purity Certified</span>
+                    </div>
+                    <div className="p-2.5 bg-surface rounded-xl border border-amber-500/20 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Transparent Board Rates</span>
                     </div>
                   </div>
                 </div>

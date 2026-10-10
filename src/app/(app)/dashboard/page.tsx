@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShoppingBag, Users, ShieldCheck, CreditCard, TrendingUp, AlertTriangle,
   Settings, Layers, Barcode as BarcodeIcon, RefreshCw, CheckCircle2,
+  ArrowLeftRight, Clock,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -72,7 +73,12 @@ export default function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
+  useEffect(() => { 
+    fetchDashboard();
+    const handleRateUpdate = () => { fetchDashboard(); };
+    window.addEventListener('njms-rates-updated', handleRateUpdate);
+    return () => window.removeEventListener('njms-rates-updated', handleRateUpdate);
+  }, [fetchDashboard]);
 
   const handleGold24Change = (val: string) => {
     setNewGoldRate(val);
@@ -316,7 +322,7 @@ export default function DashboardPage() {
           {
             title: 'Vault Valuation',
             value: loading ? '—' : data ? formatINR(data.vaultValuePaise) : '₹0',
-            count: loading ? '' : data ? `${data.totalStockCount} items in stock` : '0 items',
+            count: loading ? '' : data ? `${data.totalStockCount} items · ${data.totalGoldWeightGrams ? data.totalGoldWeightGrams.toFixed(1) + 'g Au' : '0g Au'}` : '0 items',
             icon: Layers,
             color: 'text-sky-700 bg-sky-50 border-sky-200',
           },
@@ -337,15 +343,17 @@ export default function DashboardPage() {
         })}
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Showroom Launchpad */}
       <div className="bg-surface border border-border rounded-2xl p-4 sm:p-5">
-        <h3 className="text-xs font-bold text-text uppercase tracking-wider mb-3">Quick Navigation</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <h3 className="text-xs font-bold text-text uppercase tracking-wider mb-3">Showroom Quick Launchpad</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
-            { href: '/pos', icon: ShoppingBag, label: 'New Sale (POS)', color: 'text-primary' },
-            { href: '/inventory/new', icon: Layers, label: 'Add Inventory', color: 'text-emerald-600' },
+            { href: '/pos', icon: ShoppingBag, label: 'Counter POS', color: 'text-primary' },
+            { href: '/inventory/wholesaler-approval', icon: Clock, label: 'Memo-In Stock', color: 'text-indigo-600' },
             { href: '/girvi', icon: ShieldCheck, label: 'New Girvi', color: 'text-amber-600' },
-            { href: '/barcode', icon: BarcodeIcon, label: 'Barcode Studio', color: 'text-primary' },
+            { href: '/exchange', icon: ArrowLeftRight, label: 'Exchange Gold', color: 'text-emerald-600' },
+            { href: '/barcode', icon: BarcodeIcon, label: 'Barcode Studio', color: 'text-violet-600' },
+            { href: '/inventory/settlement-queue', icon: CheckCircle2, label: 'Settle Queue', color: 'text-rose-600' },
           ].map(({ href, icon: Icon, label, color }) => (
             <a key={href} href={href} className="p-3 bg-surface-2 hover:bg-border rounded-xl text-center text-xs font-semibold text-text flex items-center justify-center gap-2 transition-all">
               <Icon className={`w-4 h-4 ${color}`} />
@@ -424,9 +432,6 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
-
-      {/* Real-time Delivery & Vault Reminders Queue */}
-      <DeliveryQueueWidget />
 
       {/* Customers count */}
       {!loading && data && (
