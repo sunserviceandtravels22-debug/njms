@@ -26,8 +26,18 @@ interface ActiveItem {
   name: string;
   metal: string;
   category: string;
+  purityPpt: number;
+  purityLabel: string;
+  grossWeightGrams: number;
+  stoneWeightGrams: number;
   netWeightGrams: number;
+  huid?: string | null;
+  makingType: string;
   makingValueRupees: number;
+  totalMakingRupees: number;
+  metalRatePerGram: number;
+  metalValueRupees: number;
+  suggestedRetailRupees: number;
   purchasePriceRupees: number;
   status?: string;
   ownership?: string;
@@ -64,7 +74,8 @@ export default function PosPage() {
         if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
           setTodayRates(res.data);
           // Look for 24K or 22K gold rate
-          const goldRate = res.data.find((r: any) => r.metal === 'GOLD' && (r.purityPpt === 1000 || r.purityPpt === 999)) ||
+          const goldRate =
+            res.data.find((r: any) => r.metal === 'GOLD' && (r.purityPpt === 1000 || r.purityPpt === 999)) ||
             res.data.find((r: any) => r.metal === 'GOLD');
           if (goldRate) {
             setSpotRatePerGram(goldRate.rateRupeesPerGram.toString());
@@ -97,7 +108,10 @@ export default function PosPage() {
           if (res.ok) {
             const list = Array.isArray(res.data?.items) ? res.data.items : Array.isArray(res.data) ? res.data : [];
             if (list.length > 0) {
-              const found = list[0];
+              const exactMatch =
+                list.find((it: any) => it.tagNo?.toLowerCase() === barcodeSearch.trim().toLowerCase()) || list[0];
+              const found = exactMatch;
+
               if (found.status === 'SOLD') {
                 setBarcodeWarning(`🚨 Item #${found.tagNo} (${found.name}) is ALREADY SOLD. It cannot be sold again.`);
                 setSelectedItem(null);
@@ -112,9 +126,72 @@ export default function PosPage() {
               }
 
               setBarcodeWarning(null);
-              const netWeight = (found.netWeightMg || 0) / 1000;
-              const making = found.makingValuePaise ? Math.round(Number(found.makingValuePaise) / 100) : (found.makingValueRupees || 0);
-              const costBasis = found.costPaise ? Math.round(Number(found.costPaise) / 100) : Math.round(making + netWeight * 6800);
+
+              // 1. Triple Weights (defensive parsing from grams or mg)
+              const grossWeight =
+                Number(found.grossWeightGrams) ||
+                (found.grossWeightMg ? found.grossWeightMg / 1000 : 0);
+              const stoneWeight =
+                Number(found.stoneWeightGrams) ||
+                (found.stoneWeightMg ? found.stoneWeightMg / 1000 : 0);
+              const netWeight =
+                Number(found.netWeightGrams) ||
+                (found.netWeightMg ? found.netWeightMg / 1000 : 0) ||
+                Math.max(0, grossWeight - stoneWeight);
+
+              // 2. Hallmark & Purity
+              const purityPpt = Number(found.purityPpt) || 916;
+              let purityLabel = `${purityPpt} Fine`;
+              if (purityPpt >= 999) purityLabel = '24K (999 Fine)';
+              else if (purityPpt >= 916) purityLabel = '22K (916 Hallmark)';
+              else if (purityPpt >= 750) purityLabel = '18K (750 Hallmark)';
+              else if (purityPpt >= 585) purityLabel = '14K (585 Hallmark)';
+
+              // 3. Making Charges
+              const makingVal =
+                Number(found.makingValueRupees) ||
+                (found.makingValuePaise ? Math.round(Number(found.makingValuePaise) / 100) : 0);
+              const makingType = found.makingType || 'PER_GRAM';
+
+              // 4. Board Metal Rate Calculation
+              let metalRate = 7200;
+              if (found.metal === 'SILVER') {
+                const silverObj = todayRates.find((r: any) => r.metal === 'SILVER');
+                metalRate = silverObj ? Number(silverObj.rateRupeesPerGram) : 90;
+              } else {
+                // Gold
+                const exactPurityObj = todayRates.find(
+                  (r: any) => r.metal === 'GOLD' && r.purityPpt === purityPpt
+                );
+                if (exactPurityObj) {
+                  metalRate = Number(exactPurityObj.rateRupeesPerGram);
+                } else {
+                  const gold24Obj = todayRates.find(
+                    (r: any) => r.metal === 'GOLD' && (r.purityPpt >= 999 || r.purityPpt === 1000)
+                  );
+                  const rate24K = gold24Obj
+                    ? Number(gold24Obj.rateRupeesPerGram)
+                    : parseFloat(spotRatePerGram) || 7500;
+                  metalRate = Math.round(rate24K * (purityPpt / 1000));
+                }
+              }
+
+              const metalValueRupees = Math.round(netWeight * metalRate);
+
+              let totalMakingRupees = 0;
+              if (makingType === 'PER_GRAM') {
+                totalMakingRupees = Math.round(makingVal * netWeight);
+              } else if (makingType === 'PERCENTAGE') {
+                totalMakingRupees = Math.round((metalValueRupees * makingVal) / 100);
+              } else {
+                totalMakingRupees = Math.round(makingVal);
+              }
+
+              const suggestedRetailRupees = metalValueRupees + totalMakingRupees;
+              const costBasis =
+                Number(found.costRupees) ||
+                (found.costPaise ? Math.round(Number(found.costPaise) / 100) : 0) ||
+                Math.round(totalMakingRupees + netWeight * 6800);
 
               setSelectedItem({
                 id: found.id,
@@ -123,14 +200,28 @@ export default function PosPage() {
                 name: found.name,
                 metal: found.metal,
                 category: found.category || 'Jewellery',
+                purityPpt,
+                purityLabel,
+                grossWeightGrams: grossWeight,
+                stoneWeightGrams: stoneWeight,
                 netWeightGrams: netWeight,
-                makingValueRupees: making,
+                huid: found.huid || null,
+                makingType,
+                makingValueRupees: makingVal,
+                totalMakingRupees,
+                metalRatePerGram: metalRate,
+                metalValueRupees,
+                suggestedRetailRupees,
                 purchasePriceRupees: costBasis,
                 status: found.status,
                 ownership: found.ownership,
               });
-              const suggested = Math.round(costBasis * 1.15);
-              setSellingPrice(suggested.toString());
+
+              setSellingPrice(
+                suggestedRetailRupees > 0
+                  ? suggestedRetailRupees.toString()
+                  : Math.round(costBasis * 1.15).toString()
+              );
             } else {
               setBarcodeWarning(`No inventory item found for "${barcodeSearch}"`);
               setSelectedItem(null);
@@ -141,7 +232,7 @@ export default function PosPage() {
     } else {
       setBarcodeWarning(null);
     }
-  }, [barcodeSearch]);
+  }, [barcodeSearch, todayRates, spotRatePerGram]);
 
   // Old Metal Live Math:
   // Fine Grams = Net Weight * (Purity % / 100)
@@ -160,7 +251,7 @@ export default function PosPage() {
 
   const stats: ProfitCalculation | null =
     selectedItem && sellingPrice
-      ? calculateProfit(sellingPriceNum, selectedItem.purchasePriceRupees, selectedItem.makingValueRupees)
+      ? calculateProfit(sellingPriceNum, selectedItem.purchasePriceRupees, selectedItem.totalMakingRupees)
       : null;
 
   const handleSale = async () => {
@@ -257,51 +348,123 @@ export default function PosPage() {
       {selectedItem ? (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Asset Summary Card */}
-          <div className="lg:col-span-4 bg-surface p-6 rounded-2xl border border-border shadow-xs flex flex-col justify-between space-y-6">
-            <div>
+          <div className="lg:col-span-5 bg-surface p-6 rounded-2xl border border-border shadow-xs flex flex-col justify-between space-y-6">
+            <div className="space-y-4">
+              {/* Badges strip */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-3 py-1 bg-primary/10 text-primary font-bold text-xs rounded-full uppercase">
-                  {selectedItem.metal} ({selectedItem.category})
+                <span className="px-3 py-1 bg-primary/10 text-primary font-extrabold text-xs rounded-full uppercase">
+                  {selectedItem.metal} • {selectedItem.category}
                 </span>
+                <span className="px-3 py-1 bg-amber-500/15 text-amber-700 border border-amber-500/30 font-black text-xs rounded-full flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{selectedItem.purityLabel}</span>
+                </span>
+                {selectedItem.huid && (
+                  <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-700 border border-emerald-500/25 font-bold text-[11px] rounded-full font-mono">
+                    HUID: {selectedItem.huid}
+                  </span>
+                )}
                 {selectedItem.ownership === 'MEMO_IN' && (
                   <span className="px-2.5 py-0.5 bg-blue-500/15 text-blue-600 border border-blue-500/30 font-black text-[10px] rounded-full uppercase tracking-wider">
-                    Wholesaler Memo Stock (Approval)
+                    Wholesaler Approval (Memo-In)
                   </span>
                 )}
               </div>
-              <h2 className="text-2xl font-extrabold text-text tracking-tight mt-3">{selectedItem.name}</h2>
-              <p className="text-xs text-text-muted font-mono mt-1">Tag: #{selectedItem.tagNo}</p>
 
-              <div className="mt-6 space-y-3 pt-4 border-t border-border text-xs">
-                <div className="flex justify-between">
-                  <span className="text-text-muted font-semibold">SKU Protocol</span>
-                  <span className="font-extrabold text-text font-mono">{selectedItem.sku}</span>
+              <div>
+                <h2 className="text-2xl font-black text-text tracking-tight">{selectedItem.name}</h2>
+                <div className="flex items-center gap-3 text-xs text-text-muted font-mono mt-1">
+                  <span>Tag: <strong>#{selectedItem.tagNo}</strong></span>
+                  <span>•</span>
+                  <span>SKU: {selectedItem.sku}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-text-muted font-semibold">Net Mass</span>
-                  <span className="font-extrabold text-primary">{selectedItem.netWeightGrams.toFixed(3)} g</span>
+              </div>
+
+              {/* Triple-Weight Certified Breakdown */}
+              <div className="grid grid-cols-3 gap-2 p-3 bg-surface-2 rounded-xl border border-border text-center">
+                <div className="p-1">
+                  <span className="text-[10px] font-bold text-text-muted uppercase block">Gross Wt</span>
+                  <span className="text-xs sm:text-sm font-extrabold text-text font-mono">
+                    {selectedItem.grossWeightGrams.toFixed(3)}g
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-text-muted font-semibold">Crafting Fee</span>
-                  <span className="font-bold text-text">₹{selectedItem.makingValueRupees.toLocaleString('en-IN')}</span>
+                <div className="p-1 border-x border-border/80">
+                  <span className="text-[10px] font-bold text-text-muted uppercase block">Stone / Deduct</span>
+                  <span className="text-xs sm:text-sm font-bold text-amber-700 font-mono">
+                    {selectedItem.stoneWeightGrams > 0 ? `-${selectedItem.stoneWeightGrams.toFixed(3)}g` : '0.000g'}
+                  </span>
                 </div>
-                <div className="flex justify-between opacity-60">
-                  <span className="text-text-muted font-semibold">Cost Basis</span>
-                  <span className="font-bold text-text">₹{selectedItem.purchasePriceRupees.toLocaleString('en-IN')}</span>
+                <div className="p-1">
+                  <span className="text-[10px] font-black text-primary uppercase block">Pure Net Gold</span>
+                  <span className="text-xs sm:text-sm font-black text-primary font-mono">
+                    {selectedItem.netWeightGrams.toFixed(3)}g
+                  </span>
+                </div>
+              </div>
+
+              {/* Live Jewellery Valuation Breakdown */}
+              <div className="space-y-2.5 pt-2 border-t border-border text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-text-muted font-medium">
+                    Pure Gold Rate ({selectedItem.purityLabel})
+                  </span>
+                  <span className="font-bold text-text font-mono">
+                    ₹{selectedItem.metalRatePerGram.toLocaleString('en-IN')}/g
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-text-muted font-medium">
+                    Pure Metal Value ({selectedItem.netWeightGrams.toFixed(3)}g × ₹{selectedItem.metalRatePerGram.toLocaleString('en-IN')})
+                  </span>
+                  <span className="font-extrabold text-text">
+                    ₹{selectedItem.metalValueRupees.toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-text-muted font-medium">
+                    Crafting / Making Charges{' '}
+                    <span className="text-[10px] text-text-muted">
+                      ({selectedItem.makingType === 'PER_GRAM' ? `₹${selectedItem.makingValueRupees}/g` : selectedItem.makingType === 'PERCENTAGE' ? `${selectedItem.makingValueRupees}%` : 'Flat'})
+                    </span>
+                  </span>
+                  <span className="font-extrabold text-emerald-600">
+                    +₹{selectedItem.totalMakingRupees.toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center opacity-60">
+                  <span className="text-text-muted font-medium">Wholesale Cost Basis</span>
+                  <span className="font-semibold text-text font-mono">
+                    ₹{selectedItem.purchasePriceRupees.toLocaleString('en-IN')}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-surface-2 rounded-xl border border-border text-text">
-              <span className="text-[10px] font-bold text-text-muted uppercase block">Total Cost Basis</span>
-              <span className="text-xl font-extrabold text-primary">
-                ₹{(selectedItem.purchasePriceRupees + selectedItem.makingValueRupees).toLocaleString('en-IN')}
-              </span>
+            {/* Suggested Retail Strip */}
+            <div className="p-4 bg-primary/5 rounded-xl border border-primary/20 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-black text-primary uppercase">Suggested Showroom Total</span>
+                <button
+                  type="button"
+                  onClick={() => setSellingPrice(selectedItem.suggestedRetailRupees.toString())}
+                  className="text-[10px] font-bold text-primary underline hover:text-primary-hover"
+                >
+                  Apply Suggested Price
+                </button>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-black text-primary">
+                  ₹{selectedItem.suggestedRetailRupees.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[11px] text-text-muted font-medium">
+                  (Metal + Making)
+                </span>
+              </div>
             </div>
           </div>
 
           {/* Settlement Form, Exchange Card & Profit Math */}
-          <div className="lg:col-span-8 bg-surface p-6 sm:p-8 rounded-2xl border border-primary/30 shadow-md space-y-6 flex flex-col justify-between">
+          <div className="lg:col-span-7 bg-surface p-6 sm:p-8 rounded-2xl border border-primary/30 shadow-md space-y-6 flex flex-col justify-between">
             <div className="space-y-6">
               <div className="flex justify-between items-center border-b border-border pb-4">
                 <div>
