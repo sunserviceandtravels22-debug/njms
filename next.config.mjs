@@ -7,10 +7,9 @@ const nextConfig = {
   // Required for Hostinger Node.js deployment — bundles everything into .next/standalone
   output: 'standalone',
 
-  // Prevent Prisma Client from being bundled into the client bundle
-  experimental: {
-    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs'],
-  },
+  // Prevent Prisma Client and native modules from being bundled into client/edge bundles
+  // serverExternalPackages is the stable API in Next.js 14.1+
+  serverExternalPackages: ['@prisma/client', 'bcryptjs'],
 
   eslint: {
     ignoreDuringBuilds: true,

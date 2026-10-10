@@ -21,7 +21,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "deploy:hostinger": "npm run build && echo 'Build complete. Upload .next, server.js, package.json, prisma/ to Hostinger.'",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate --no-engine || prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -50,7 +50,10 @@
     "recharts": "^3.10.1",
     "tailwind-merge": "^2.5.2",
     "zod": "^3.23.8",
-    "zustand": "^4.5.5"
+    "zustand": "^4.5.5",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.12"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -60,9 +63,6 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.8",
     "@types/react-dom": "^18.3.0",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47",
-    "tailwindcss": "^3.4.12",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2",
     "vitest": "^2.1.1"
