@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { ResponsiveList, Column } from '@/components/common/ResponsiveList';
 import { CustomerFormDrawer } from '@/components/customers/CustomerFormDrawer';
 import { PhotoPreviewModal } from '@/components/common/PhotoPreviewModal';
+import { Customer360Modal } from '@/components/customers/Customer360Modal';
 import { CandidateCustomer } from '@/components/customers/DuplicateWarningSheet';
 import { formatMoney } from '@/domain/money';
 import {
@@ -31,6 +32,7 @@ export default function CustomersPage() {
   // Modal & Drawer States
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editCustomer, setEditCustomer] = useState<CandidateCustomer | null>(null);
+  const [active360CustomerId, setActive360CustomerId] = useState<string | null>(null);
 
   // Photo Preview State
   const [previewPhoto, setPreviewPhoto] = useState<{ url: string; driveUrl?: string; name: string } | null>(null);
@@ -42,7 +44,7 @@ export default function CustomersPage() {
       if (search) url += `&search=${encodeURIComponent(search)}`;
       if (activeTag !== 'ALL') url += `&tag=${activeTag}`;
 
-      const res = await fetch(url);
+      const res = await fetch(url, { credentials: 'include' });
       const json = await res.json();
       if (json.ok) {
         setCustomers(json.data);
@@ -97,12 +99,9 @@ export default function CustomersPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() =>
-              c.photoUrl
-                ? setPreviewPhoto({ url: c.photoUrl, driveUrl: c.photoDriveUrl || undefined, name: c.name })
-                : null
-            }
+            onClick={() => setActive360CustomerId(c.id)}
             className="w-10 h-10 rounded-lg overflow-hidden bg-amber-100 border border-amber-300 shrink-0 flex items-center justify-center hover:opacity-80 transition cursor-pointer"
+            title="View 360° Profile"
           >
             {c.photoUrl ? (
               <img src={c.photoUrl} alt={c.name} className="w-full h-full object-cover" />
@@ -111,9 +110,12 @@ export default function CustomersPage() {
             )}
           </button>
 
-          <div>
+          <div
+            onClick={() => setActive360CustomerId(c.id)}
+            className="cursor-pointer group"
+          >
             <div className="flex items-center gap-2">
-              <span className="font-bold text-amber-950 text-sm">{c.name}</span>
+              <span className="font-bold text-amber-950 text-sm group-hover:text-primary transition-colors">{c.name}</span>
               {c.nameHindi && <span className="text-xs text-amber-700">({c.nameHindi})</span>}
             </div>
             {c.relationName && (
@@ -151,6 +153,14 @@ export default function CustomersPage() {
       className: 'text-right',
       cell: (c) => (
         <div className="flex items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={() => setActive360CustomerId(c.id)}
+            className="p-2 text-primary hover:bg-primary/10 rounded-lg transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+            title="View 360° History & KYC"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -210,6 +220,13 @@ export default function CustomersPage() {
       )}
 
       <div className="pt-2 border-t border-amber-100 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setActive360CustomerId(c.id)}
+          className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline min-h-[44px]"
+        >
+          <Eye className="w-3.5 h-3.5" /> View 360° History
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -323,6 +340,18 @@ export default function CustomersPage() {
         onSuccess={() => fetchCustomers()}
         title={editCustomer ? 'Edit Customer Profile' : 'Add New Customer'}
       />
+
+      {/* Customer 360 Consolidated History Modal */}
+      {active360CustomerId && (
+        <Customer360Modal
+          customerId={active360CustomerId}
+          onClose={() => setActive360CustomerId(null)}
+          onEdit={(cust) => {
+            setEditCustomer(cust);
+            setDrawerOpen(true);
+          }}
+        />
+      )}
 
       {/* Photo Preview Modal */}
       <PhotoPreviewModal

@@ -83,6 +83,47 @@ export async function GET(req: NextRequest) {
     const categories = await db.cashCategory.findMany();
     const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
 
+    // Batch resolve party names for ref types
+    const saleRefs = payments.filter((p) => p.refType === 'SALE').map((p) => p.refId);
+    const girviRefs = payments.filter((p) => p.refType === 'GIRVI').map((p) => p.refId);
+    const repledgeRefs = payments.filter((p) => p.refType === 'REPLEDGE').map((p) => p.refId);
+
+    const [sales, girvis, repledges] = await Promise.all([
+      saleRefs.length > 0
+        ? db.sale.findMany({
+            where: { OR: [{ invoiceNo: { in: saleRefs } }, { id: { in: saleRefs } }] },
+            include: { customer: true },
+          })
+        : [],
+      girviRefs.length > 0
+        ? db.girviLoan.findMany({
+            where: { OR: [{ id: { in: girviRefs } }, { loanNo: { in: girviRefs } }] },
+            include: { customer: true },
+          })
+        : [],
+      repledgeRefs.length > 0
+        ? db.repledgeLoan.findMany({
+            where: { OR: [{ id: { in: repledgeRefs } }, { loanNo: { in: repledgeRefs } }] },
+          })
+        : [],
+    ]);
+
+    const partyMap = new Map<string, string>();
+    for (const s of sales) {
+      const name = s.customer?.name || 'Walk-in Client';
+      partyMap.set(s.invoiceNo, name);
+      partyMap.set(s.id, name);
+    }
+    for (const g of girvis) {
+      const name = g.customer?.name || 'Girvi Client';
+      partyMap.set(g.id, name);
+      partyMap.set(g.loanNo, name);
+    }
+    for (const r of repledges) {
+      partyMap.set(r.id, `Financier (${r.loanNo})`);
+      partyMap.set(r.loanNo, `Financier (${r.loanNo})`);
+    }
+
     // 3. Transform payments to LedgerPaymentItem format for balance chain engine
     const ledgerItems: LedgerPaymentItem[] = payments.map((p) => ({
       id: p.id,
@@ -124,22 +165,30 @@ export async function GET(req: NextRequest) {
     const netFlowPaise = rangeInPaise - rangeOutPaise;
 
     // 6. Format payments list for client response
-    const formattedPayments = payments.map((p) => ({
-      id: p.id,
-      businessDate: p.businessDate.toISOString().split('T')[0],
-      direction: p.direction,
-      refType: p.refType,
-      refId: p.refId,
-      flowKind: p.flowKind,
-      mode: p.mode,
-      amountPaise: p.amountPaise.toString(),
-      categoryId: p.categoryId,
-      categoryName: p.categoryId ? categoryMap.get(p.categoryId) || 'Uncategorized' : 'Uncategorized',
-      fundAccountId: p.fundAccountId,
-      utr: p.utr || null,
-      reversedOfId: p.reversedOfId || null,
-      createdAt: p.createdAt.toISOString(),
-    }));
+    const formattedPayments = payments.map((p) => {
+      const dt = new Date(p.createdAt);
+      const timeString = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const party = partyMap.get(p.refId) || (p.refType === 'SALE' ? 'Walk-in Client' : p.refType === 'GIRVI' ? 'Girvi Client' : 'Direct Transaction');
+
+      return {
+        id: p.id,
+        businessDate: p.businessDate.toISOString().split('T')[0],
+        timeString,
+        partyName: party,
+        direction: p.direction,
+        refType: p.refType,
+        refId: p.refId,
+        flowKind: p.flowKind,
+        mode: p.mode,
+        amountPaise: p.amountPaise.toString(),
+        categoryId: p.categoryId,
+        categoryName: p.categoryId ? categoryMap.get(p.categoryId) || 'Uncategorized' : 'Uncategorized',
+        fundAccountId: p.fundAccountId,
+        utr: p.utr || null,
+        reversedOfId: p.reversedOfId || null,
+        createdAt: p.createdAt.toISOString(),
+      };
+    });
 
     return NextResponse.json({
       ok: true,

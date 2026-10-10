@@ -45,7 +45,13 @@ interface PaymentItem {
   utr: string | null;
   reversedOfId: string | null;
   createdAt: string;
+  // Enhanced fields from cashbook API enrichment
+  partyName?: string | null;
+  refType?: string | null;
+  refId?: string | null;
+  timeString?: string | null;
 }
+
 
 export default function CashbookPage() {
   const todayStr = new Date().toISOString().split('T')[0];
@@ -315,11 +321,16 @@ export default function CashbookPage() {
                     </div>
 
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-sm font-bold text-text truncate">
-                          {p.categoryName}
+                          {p.partyName || p.categoryName}
                         </span>
-                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-surface-2 border border-border text-text-muted uppercase">
+                        {p.refType && (
+                          <span className="px-1.5 py-0.5 text-[9px] font-extrabold rounded-md bg-primary/10 text-primary border border-primary/20 uppercase">
+                            {p.refType}
+                          </span>
+                        )}
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-surface-2 border border-border text-text-muted uppercase">
                           {p.mode}
                         </span>
                         {isReversed && (
@@ -328,8 +339,13 @@ export default function CashbookPage() {
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-text-muted truncate">
-                        {p.businessDate} {p.utr ? `• UTR: ${p.utr}` : ''}
+                      <div className="text-xs text-text-muted flex flex-wrap items-center gap-2 mt-0.5">
+                        <span>{p.timeString ? `${p.timeString} • ` : ''}{p.businessDate}</span>
+                        {p.refId && <span className="font-mono text-[11px] text-text-muted">Ref: {p.refId}</span>}
+                        {p.categoryName && p.categoryName !== 'Uncategorized' && (
+                          <span className="text-[11px] text-text-muted">• {p.categoryName}</span>
+                        )}
+                        {p.utr && <span>• UTR: {p.utr}</span>}
                       </div>
                     </div>
                   </div>

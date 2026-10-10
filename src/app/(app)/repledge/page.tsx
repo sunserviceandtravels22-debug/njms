@@ -19,6 +19,8 @@ import {
   ChevronUp,
   AlertTriangle,
   Sparkles,
+  Lock,
+  Check,
 } from 'lucide-react';
 import { formatMoney } from '@/domain/money';
 
@@ -46,10 +48,12 @@ interface RepledgeSearchResult {
   status: string;
   itemCount: number;
   articlesSummary: string;
+  items?: any[];
 }
 
 export default function RepledgePage() {
   const [loans, setLoans] = useState<any[]>([]);
+  const [vaultLocations, setVaultLocations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('ACTIVE');
 
@@ -64,10 +68,33 @@ export default function RepledgePage() {
   const [vendorRate, setVendorRate] = useState('1.25'); // 1.25% per month
   const [submitting, setSubmitting] = useState(false);
 
+  // Settle Contract Modal
+  const [settleTarget, setSettleTarget] = useState<any | null>(null);
+  const [settlePrincipal, setSettlePrincipal] = useState('');
+  const [settleInterest, setSettleInterest] = useState('');
+  const [settleMode, setSettleMode] = useState('BANK');
+  const [returnVaultId, setReturnVaultId] = useState('');
+  const [settling, setSettling] = useState(false);
+
+  const fetchVaults = async () => {
+    try {
+      const res = await fetch('/api/v1/locations', { credentials: 'include' });
+      const json = await res.json();
+      if (json.ok && Array.isArray(json.data)) {
+        setVaultLocations(json.data);
+        if (json.data.length > 0 && !returnVaultId) {
+          setReturnVaultId(json.data[0].id);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   const fetchLoans = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/repledge?status=${statusFilter}`);
+      const res = await fetch(`/api/v1/repledge?status=${statusFilter}`, { credentials: 'include' });
       const json = await res.json();
       if (json.ok) {
         setLoans(json.data);
@@ -81,6 +108,7 @@ export default function RepledgePage() {
 
   useEffect(() => {
     fetchLoans();
+    fetchVaults();
   }, [statusFilter]);
 
   // Live Multi-Criteria Search (S-190)
@@ -93,7 +121,10 @@ export default function RepledgePage() {
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await fetch(`/api/v1/repledge/form-search?q=${encodeURIComponent(searchQuery)}&financierRate=${vendorRate}`);
+        const res = await fetch(
+          `/api/v1/repledge/form-search?q=${encodeURIComponent(searchQuery)}&financierRate=${vendorRate}`,
+          { credentials: 'include' }
+        );
         if (res.ok) {
           const json = await res.json();
           if (json.ok) {
@@ -134,9 +165,10 @@ export default function RepledgePage() {
     try {
       const res = await fetch('/api/v1/repledge', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vendorId: 'VEND-SHARMA-FINANCE',
+          vendorId: financierName || 'Sharma Finance',
           principalPaise: BigInt(totalOffered * 100).toString(),
           rateBp: Math.round(parseFloat(vendorRate) * 100),
           notes: `Re-pledged ${selectedGirviIds.size} girvis to ${financierName}`,
@@ -159,8 +191,52 @@ export default function RepledgePage() {
     }
   };
 
+  const openSettleModal = (l: any) => {
+    setSettleTarget(l);
+    const pAmt = parseInt(l.principalPaise, 10) / 100;
+    const iAmt = parseInt(l.financierMonthlyInterestPaise || '0', 10) / 100;
+    setSettlePrincipal(pAmt.toString());
+    setSettleInterest(iAmt.toString());
+  };
+
+  const handleSettleSubmit = async () => {
+    if (!settleTarget) return;
+
+    setSettling(true);
+    try {
+      const pPaise = BigInt((parseFloat(settlePrincipal) || 0) * 100);
+      const iPaise = BigInt((parseFloat(settleInterest) || 0) * 100);
+
+      const res = await fetch(`/api/v1/repledge/${settleTarget.id}/settle`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalPaidPaise: pPaise.toString(),
+          interestPaidPaise: iPaise.toString(),
+          paymentMode: settleMode,
+          returnToLocationId: returnVaultId || undefined,
+          notes: `Settled with ${settleTarget.vendorId}. Ornaments returned to shop vault.`,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.ok) {
+        alert(json.message || 'Re-pledge contract settled and ornaments returned to safe vault!');
+        setSettleTarget(null);
+        fetchLoans();
+      } else {
+        alert(json.error || 'Failed to settle contract');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Settlement error');
+    } finally {
+      setSettling(false);
+    }
+  };
+
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-6 pb-28">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface p-6 rounded-2xl border border-border shadow-xs">
         <div className="flex items-center gap-3">
@@ -168,11 +244,11 @@ export default function RepledgePage() {
             <Building2 className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-primary uppercase">
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-primary uppercase">
               Re-Pledge Financier Portal
             </h1>
             <p className="text-xs text-text-muted">
-              Sub-pledge customer collateral, monitor rate gaps, monthly rupee spread & custody
+              Sub-pledge customer collateral, monitor rupee spread & return ornaments to safe vault
             </p>
           </div>
         </div>
@@ -187,7 +263,7 @@ export default function RepledgePage() {
       </div>
 
       {/* Re-Pledge Register List */}
-      <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden shadow-2xs">
         <div className="p-4 border-b border-border flex items-center justify-between bg-surface-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted">
             Active Re-Pledge Financier Contracts ({loans.length})
@@ -206,42 +282,161 @@ export default function RepledgePage() {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {loans.map((l) => (
-              <div key={l.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-surface-2 transition-colors">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-extrabold text-primary text-sm">{l.loanNo}</span>
-                    <span className="px-2 py-0.5 text-[10px] font-extrabold rounded bg-amber-500/10 text-amber-600 border border-amber-500/20">
-                      {(l.rateBp / 100).toFixed(2)}% / month
-                    </span>
-                    <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-purple-500/10 text-purple-600 border border-purple-500/20">
-                      🟣 REPLEGED
-                    </span>
-                  </div>
-                  <div className="text-xs text-text-muted flex flex-wrap gap-4">
-                    <span>Financier: {l.vendorId}</span>
-                    <span>Date: {l.repledgeDate}</span>
-                    <span className="font-bold text-text">Mass: {(l.totalGrossWeightMg / 1000).toFixed(3)} g</span>
-                  </div>
-                </div>
+            {loans.map((l) => {
+              const pAmt = parseInt(l.principalPaise, 10) / 100;
+              const isClosed = l.status === 'CLOSED';
 
-                <div className="text-right">
-                  <div className="text-xl font-black text-text">
-                    ₹{parseInt(l.principalPaise, 10) / 100}
+              return (
+                <div key={l.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-surface-2 transition-colors">
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-extrabold text-primary text-sm">{l.loanNo}</span>
+                      <span className="px-2 py-0.5 text-[10px] font-extrabold rounded bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                        {(l.rateBp / 100).toFixed(2)}% / mo
+                      </span>
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded border ${
+                        isClosed ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' : 'bg-purple-500/10 text-purple-600 border-purple-500/20'
+                      }`}>
+                        {isClosed ? 'SETTLED & RETURNED' : '🟣 ACTIVE REPLEDGE'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-text-muted flex flex-wrap gap-4">
+                      <span>Financier: <strong className="text-text">{l.vendorId}</strong></span>
+                      <span>Contract Date: {l.repledgeDate}</span>
+                      <span className="font-bold text-text">Pledged Mass: {(l.totalGrossWeightMg / 1000).toFixed(3)}g</span>
+                    </div>
                   </div>
-                  <div className="text-xs text-emerald-600 font-bold">
-                    Est. Interest: ₹{parseInt(l.financierMonthlyInterestPaise, 10) / 100}/mo
+
+                  <div className="flex items-center gap-4 self-end md:self-center shrink-0">
+                    <div className="text-right">
+                      <div className="text-xl font-black text-text">
+                        ₹{pAmt.toLocaleString('en-IN')}
+                      </div>
+                      <div className="text-xs text-emerald-600 font-bold">
+                        Financier Int: ₹{parseInt(l.financierMonthlyInterestPaise, 10) / 100}/mo
+                      </div>
+                    </div>
+
+                    {!isClosed && (
+                      <button
+                        onClick={() => openSettleModal(l)}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
+                      >
+                        Settle Contract
+                      </button>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
+      {/* Settle Contract Modal Drawer */}
+      {settleTarget && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setSettleTarget(null)}
+        >
+          <div
+            className="bg-surface border border-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="text-base font-bold text-text">Settle Contract #{settleTarget.loanNo}</h3>
+                <p className="text-xs text-text-muted">Pay financier & return pledged ornaments back to safe vault</p>
+              </div>
+              <button onClick={() => setSettleTarget(null)} className="p-1 rounded-lg text-text-muted hover:text-text">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-surface-2 rounded-xl space-y-1">
+                <div className="flex justify-between"><span className="text-text-muted">Financier Vendor:</span><span className="font-bold">{settleTarget.vendorId}</span></div>
+                <div className="flex justify-between"><span className="text-text-muted">Contract Principal:</span><span className="font-bold">₹{(parseInt(settleTarget.principalPaise, 10) / 100).toLocaleString('en-IN')}</span></div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-text-muted block mb-1">Principal Repayment (₹) *</label>
+                <input
+                  type="number"
+                  value={settlePrincipal}
+                  onChange={(e) => setSettlePrincipal(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-xl text-xs font-bold text-text"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-text-muted block mb-1">Interest Paid to Financier (₹)</label>
+                <input
+                  type="number"
+                  value={settleInterest}
+                  onChange={(e) => setSettleInterest(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-xl text-xs font-bold text-text"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-text-muted block mb-1">Return Ornaments To Safe Locker / Vault *</label>
+                <select
+                  value={returnVaultId}
+                  onChange={(e) => setReturnVaultId(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-xl text-xs font-bold text-text"
+                >
+                  {vaultLocations.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold text-text-muted block mb-1">Settlement Payment Mode</label>
+                <select
+                  value={settleMode}
+                  onChange={(e) => setSettleMode(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-xl text-xs font-bold text-text"
+                >
+                  <option value="BANK">Bank Transfer / RTGS</option>
+                  <option value="CASH">Cash Drawer</option>
+                  <option value="UPI">UPI Payment</option>
+                </select>
+              </div>
+
+              <div className="p-3 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-xl text-center">
+                <span className="text-[11px] block text-emerald-700">Total Money Disbursed to Financier:</span>
+                <span className="text-base font-black">
+                  ₹{((parseFloat(settlePrincipal) || 0) + (parseFloat(settleInterest) || 0)).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setSettleTarget(null)}
+                className="flex-1 py-2.5 bg-surface-2 border border-border text-xs font-bold rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSettleSubmit}
+                disabled={settling}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md"
+              >
+                {settling ? 'Settling...' : 'Confirm Settlement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* S-190 Extended Re-Pledge Wizard Drawer */}
       {isWizardOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-surface w-full max-w-3xl rounded-2xl border border-border p-6 space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[90dvh] overflow-y-auto custom-scrollbar">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-border pb-3">
@@ -282,10 +477,10 @@ export default function RepledgePage() {
               <Search className="w-4 h-4 absolute left-3.5 top-3 text-text-muted" />
               <input
                 type="text"
-                placeholder="One search: Customer Name · Phone · Girvi No · Article · Tag (#overdue60)..."
+                placeholder="Search: Customer Name · Phone · Girvi No · Article..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-surface-2 border border-border rounded-xl text-xs font-bold text-text outline-none focus:border-primary"
+                className="w-full pl-10 pr-4 py-2.5 bg-surface-2 border border-border rounded-xl text-xs font-bold text-text outline-hidden focus:border-primary"
               />
               {searching && <RefreshCw className="w-4 h-4 absolute right-3 top-3 animate-spin text-primary" />}
             </div>
@@ -300,90 +495,83 @@ export default function RepledgePage() {
                       <div
                         key={res.id}
                         onClick={() => toggleSelectGirvi(res.id)}
-                        className={`p-4 cursor-pointer transition-colors space-y-2 ${
-                          isChecked ? 'bg-primary/5 border-l-4 border-primary' : 'hover:bg-surface-2'
+                        className={`p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer transition-colors ${
+                          isChecked ? 'bg-primary/10 border-l-4 border-l-primary' : 'hover:bg-surface-2'
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {}}
-                              className="w-4 h-4 accent-primary rounded cursor-pointer"
-                            />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-black text-text text-sm">{res.loanNo}</span>
-                                <span className="text-xs font-bold text-primary">• {res.customerName}</span>
-                                {res.customerPhone && (
-                                  <span className="text-[10px] text-text-muted font-mono">({res.customerPhone})</span>
-                                )}
-                              </div>
-                              <div className="text-[11px] text-text-muted mt-0.5">{res.articlesSummary}</div>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleSelectGirvi(res.id)}
+                            className="w-4 h-4 rounded text-primary"
+                          />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-text">{res.loanNo}</span>
+                              <span className="text-xs text-primary font-bold">({res.customerName})</span>
                             </div>
-                          </div>
-
-                          <div className="text-right">
-                            <div className="text-sm font-black text-text">₹{res.principalRupees.toLocaleString('en-IN')}</div>
-                            <div className="text-[10px] font-bold text-amber-600">{res.customerRatePm}% / mo (Customer)</div>
+                            <p className="text-[11px] text-text-muted">
+                              {res.articlesSummary} • {res.totalNetGrams.toFixed(2)}g net
+                            </p>
                           </div>
                         </div>
 
-                        {/* Financial Figures Bar */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border/60 text-[11px]">
-                          <div className="p-2 bg-surface rounded-lg border border-border">
-                            <span className="text-[9px] text-text-muted font-bold block uppercase">Rate Gap</span>
-                            <span className={`font-black ${res.rateGapPpPm > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                              {res.rateGapPpPm > 0 ? `+${res.rateGapPpPm}` : res.rateGapPpPm} pp/mo
-                            </span>
-                          </div>
-                          <div className="p-2 bg-surface rounded-lg border border-border">
-                            <span className="text-[9px] text-text-muted font-bold block uppercase">Rupee Spread</span>
-                            <span className="font-black text-emerald-600">+₹{res.rupeeSpreadMonthly.toLocaleString('en-IN')}/mo</span>
-                          </div>
-                          <div className="p-2 bg-surface rounded-lg border border-border">
-                            <span className="text-[9px] text-text-muted font-bold block uppercase">Own Capital</span>
-                            <span className="font-black text-text">₹{res.ownCapitalRupees.toLocaleString('en-IN')}</span>
-                          </div>
-                          <div className="p-2 bg-surface rounded-lg border border-border">
-                            <span className="text-[9px] text-text-muted font-bold block uppercase">LTV Ratio</span>
-                            <span className="font-black text-primary">{res.ltvPct.toFixed(1)}%</span>
-                          </div>
+                        <div className="text-right text-xs">
+                          <span className="font-extrabold text-text">₹{res.offeredRupees.toLocaleString('en-IN')}</span>
+                          <p className="text-[10px] text-emerald-600 font-bold">
+                            Spread: +₹{res.rupeeSpreadMonthly}/mo
+                          </p>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
-            ) : searchQuery.trim() ? (
-              <div className="p-8 text-center text-xs text-text-muted border border-border rounded-xl">
-                No matching girvi contracts found.
+            ) : searchQuery && !searching ? (
+              <div className="p-8 text-center text-xs text-text-muted">
+                No available Girvi contracts found. Any already active repledge contracts are excluded automatically.
               </div>
             ) : null}
 
-            {/* Wizard Sticky Totals Bar */}
-            {selectedGirviIds.size > 0 && (
-              <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl space-y-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <span className="text-xs font-black text-primary uppercase">
-                      Selected {selectedGirviIds.size} Girvis ({totalNetGrams.toFixed(1)}g net)
-                    </span>
-                    <div className="text-xs font-bold text-text">
-                      Offered: ₹{totalOffered.toLocaleString('en-IN')} | Spread: +₹{totalSpreadMonthly.toLocaleString('en-IN')}/mo | Own Capital: ₹{totalOwnCapital.toLocaleString('en-IN')}
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleCreateRePledge}
-                    disabled={submitting}
-                    className="px-5 py-2.5 bg-primary text-white font-bold text-xs rounded-xl hover:bg-primary-dark shadow-md transition-all active:scale-95 disabled:opacity-50"
-                  >
-                    {submitting ? 'Executing...' : 'Confirm Re-Pledge Contract'}
-                  </button>
+            {/* Overall Wizard Totals Strip */}
+            {selectedRows.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-surface-2 rounded-xl border border-border text-center text-xs">
+                <div>
+                  <span className="text-[10px] text-text-muted font-bold block">TOTAL OFFERED</span>
+                  <strong className="text-sm font-black text-primary">₹{totalOffered.toLocaleString('en-IN')}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-text-muted font-bold block">NET WEIGHT</span>
+                  <strong className="text-sm font-black text-text">{totalNetGrams.toFixed(2)} g</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-text-muted font-bold block">OWN CAPITAL</span>
+                  <strong className="text-sm font-black text-amber-700">₹{totalOwnCapital.toLocaleString('en-IN')}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-text-muted font-bold block">MONTHLY SPREAD</span>
+                  <strong className="text-sm font-black text-emerald-600">+₹{totalSpreadMonthly.toLocaleString('en-IN')}</strong>
                 </div>
               </div>
             )}
+
+            {/* Footer Buttons */}
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <button
+                onClick={() => setIsWizardOpen(false)}
+                className="px-4 py-2 bg-surface-2 border border-border rounded-xl text-xs font-bold text-text hover:bg-border"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateRePledge}
+                disabled={submitting || selectedGirviIds.size === 0}
+                className="px-5 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 disabled:opacity-50"
+              >
+                {submitting ? 'Executing Contract...' : `Execute (${selectedGirviIds.size}) Re-Pledges`}
+              </button>
+            </div>
           </div>
         </div>
       )}

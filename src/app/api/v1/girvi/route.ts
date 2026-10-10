@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/server/auth';
 import { writeAuditLog } from '@/server/audit';
 import { db } from '@/server/db';
-import { Metal, GirviStatus, Direction, PayRefType, FlowKind, PayMode } from '@prisma/client';
+import { Metal, GirviStatus, Direction, PayRefType, FlowKind, PayMode, CustomerTag, RelationType } from '@prisma/client';
 import { gramsToMg, mgToGrams } from '@/domain/weight';
 import { rupeesToPaise, paiseToRupees } from '@/domain/money';
 
@@ -57,16 +57,28 @@ export async function GET(req: NextRequest) {
         totalNetWeightMg += i.netWeightMg;
         totalValuationPaise += i.valuationPaise;
 
+        // Extract defect if stored in ornamentType format "Ring [Defect: Broken Clasp]"
+        let defectType = 'None';
+        let cleanName = i.ornamentType;
+        const defectMatch = i.ornamentType.match(/\[Defect:\s*([^\]]+)\]/i);
+        if (defectMatch) {
+          defectType = defectMatch[1].trim();
+          cleanName = i.ornamentType.replace(/\[Defect:\s*[^\]]+\]/i, '').trim();
+        }
+
         return {
           id: i.id,
-          ornamentType: i.ornamentType,
+          ornamentType: cleanName,
+          rawOrnamentType: i.ornamentType,
+          defectType,
           metal: i.metal,
           purity: i.purity,
-          grossWeightGrams: mgToGrams(i.grossWeightMg), // Displayed in Grams (g)
+          grossWeightGrams: mgToGrams(i.grossWeightMg),
           stoneWeightGrams: mgToGrams(i.stoneWeightMg),
           netWeightGrams: mgToGrams(i.netWeightMg),
-          valuationRupees: paiseToRupees(i.valuationPaise), // Displayed in Rupees (₹)
-          locationName: i.location?.name || 'Vault',
+          valuationRupees: paiseToRupees(i.valuationPaise),
+          locationId: i.locationId,
+          locationName: i.location?.name || 'Main Safe Locker',
         };
       });
 
@@ -76,13 +88,16 @@ export async function GET(req: NextRequest) {
         customerId: l.customerId,
         customerName: l.customer?.name || 'Unknown',
         customerPhone: l.customer?.phone || '',
+        customerRelation: l.customer?.relationName ? `${l.customer.relationType}: ${l.customer.relationName}` : '',
+        customerCity: l.customer?.city || 'Local',
         date: l.date.toISOString().split('T')[0],
         dueDate: l.dueDate ? l.dueDate.toISOString().split('T')[0] : null,
-        principalRupees: paiseToRupees(l.principalPaise), // Displayed in Rupees (₹)
+        principalRupees: paiseToRupees(l.principalPaise),
         principalPaise: l.principalPaise.toString(),
         interestRatePerMonthPct: Number(l.interestRatePerMonthPct),
         status: l.status,
-        totalGrossWeightGrams: mgToGrams(totalGrossWeightMg), // Displayed in Grams (g)
+        notes: l.notes || '',
+        totalGrossWeightGrams: mgToGrams(totalGrossWeightMg),
         totalNetWeightGrams: mgToGrams(totalNetWeightMg),
         totalValuationRupees: paiseToRupees(totalValuationPaise),
         items: itemsFormatted,
@@ -111,17 +126,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       customerId,
+      customer,
       principalRupees,
       interestRatePerMonthPct = 1.5,
       loanDate,
       dueDate,
       items = [],
+      defaultLocationId,
       notes,
     } = body;
-
-    if (!customerId) {
-      return NextResponse.json({ ok: false, error: 'Customer is required' }, { status: 400 });
-    }
 
     const pRupees = parseFloat(principalRupees);
     if (!pRupees || pRupees <= 0) {
@@ -132,19 +145,58 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'At least one ornament item is required' }, { status: 400 });
     }
 
+    // Resolve or create Customer with complete KYC
+    let resolvedCustomerId = customerId;
+    if (!resolvedCustomerId && customer) {
+      const cleanPhone = (customer.phone || '').trim();
+      if (!cleanPhone) {
+        return NextResponse.json({ ok: false, error: 'Customer mobile phone is required' }, { status: 400 });
+      }
+
+      let existing = await db.customer.findFirst({ where: { phone: cleanPhone } });
+      if (!existing) {
+        existing = await db.customer.create({
+          data: {
+            name: (customer.name || 'Girvi Client').trim(),
+            nameHindi: customer.nameHindi?.trim() || null,
+            phone: cleanPhone,
+            altPhone: customer.altPhone?.trim() || null,
+            relationType: (customer.relationType as RelationType) || RelationType.FATHER,
+            relationName: customer.relationName?.trim() || null,
+            address: customer.address?.trim() || null,
+            city: customer.city?.trim() || 'Local',
+            pincode: customer.pincode?.trim() || null,
+            identityDocType: customer.identityDocType?.trim() || 'Aadhaar Card',
+            identityDocNumber: customer.identityDocNumber?.trim() || null,
+            tag: CustomerTag.STANDARD,
+            createdById: user.id,
+          },
+        });
+      }
+      resolvedCustomerId = existing.id;
+    }
+
+    if (!resolvedCustomerId) {
+      return NextResponse.json({ ok: false, error: 'Customer is required' }, { status: 400 });
+    }
+
     const principalPaise = rupeesToPaise(pRupees);
     const lDate = loanDate ? new Date(loanDate) : new Date();
     const generatedLoanNo = `GIR-${Date.now().toString().slice(-6)}`;
 
     // Resolve default Vault Location
-    const vaultLoc = await db.storageLocation.findFirst({ where: { type: 'VAULT' } });
+    let targetLocationId = defaultLocationId;
+    if (!targetLocationId) {
+      const vaultLoc = await db.storageLocation.findFirst({ where: { type: 'VAULT', active: true } });
+      targetLocationId = vaultLoc?.id || null;
+    }
 
     const [loan, payment] = await db.$transaction(async (tx) => {
       // 1. Create GirviLoan
       const newLoan = await tx.girviLoan.create({
         data: {
           loanNo: generatedLoanNo,
-          customerId,
+          customerId: resolvedCustomerId,
           date: lDate,
           dueDate: dueDate ? new Date(dueDate) : null,
           principalPaise,
@@ -155,34 +207,39 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // 2. Create GirviItems with Grams -> Mg & Rupees -> Paise conversion
+      // 2. Create GirviItems with Grams -> Mg & defect annotations
       for (const item of items) {
         const grossMg = gramsToMg(parseFloat(item.grossWeightGrams) || 0);
         const stoneMg = gramsToMg(parseFloat(item.stoneWeightGrams) || 0);
         const netMg = Math.max(0, grossMg - stoneMg);
         const valuationPaise = rupeesToPaise(parseFloat(item.valuationRupees) || 0);
 
+        let ornamentTitle = (item.ornamentType || 'Gold Ornament').trim();
+        if (item.defectType && item.defectType !== 'None') {
+          ornamentTitle = `${ornamentTitle} [Defect: ${item.defectType}]`;
+        }
+
         await tx.girviItem.create({
           data: {
             girviLoanId: newLoan.id,
-            ornamentType: item.ornamentType?.trim() || 'Gold Ornament',
+            ornamentType: ornamentTitle,
             metal: (item.metal as Metal) || Metal.GOLD,
             purity: item.purity || '22K',
             grossWeightMg: grossMg,
             stoneWeightMg: stoneMg,
             netWeightMg: netMg,
             valuationPaise,
-            locationId: vaultLoc?.id || null,
+            locationId: item.locationId || targetLocationId,
           },
         });
       }
 
-      // 3. Post Cash Payout Flow in Payment Ledger (Money given to Customer)
+      // 3. Post Cash Payout in Payment Ledger
       const p = await tx.payment.create({
         data: {
           businessDate: lDate,
           refType: PayRefType.GIRVI,
-          refId: newLoan.id,
+          refId: newLoan.loanNo,
           direction: Direction.OUT,
           flowKind: FlowKind.GIRVI_LOAN_OUT,
           mode: PayMode.CASH,

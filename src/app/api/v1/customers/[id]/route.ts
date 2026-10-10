@@ -3,6 +3,10 @@ import { getSessionUser } from '@/server/auth';
 import { writeAuditLog } from '@/server/audit';
 import { db } from '@/server/db';
 import { CustomerTag, RelationType } from '@prisma/client';
+import { paiseToRupees } from '@/domain/money';
+import { mgToGrams } from '@/domain/weight';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   req: NextRequest,
@@ -18,14 +22,15 @@ export async function GET(
       where: { id: params.id },
       include: {
         sales: {
-          take: 5,
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            invoiceNo: true,
-            date: true,
-            totalPaise: true,
-            status: true,
+          orderBy: { date: 'desc' },
+          include: { items: true },
+        },
+        girviLoans: {
+          orderBy: { date: 'desc' },
+          include: {
+            items: {
+              include: { location: true },
+            },
           },
         },
       },
@@ -35,22 +40,141 @@ export async function GET(
       return NextResponse.json({ ok: false, error: 'Customer not found' }, { status: 404 });
     }
 
-    const formattedSales = customer.sales.map((s: any) => ({
-      ...s,
-      totalPaise: s.totalPaise.toString(),
+    // Extract all girvi loan IDs for this customer
+    const girviIds = customer.girviLoans.map((g) => g.id);
+
+    // Fetch all repledge links for this customer's girvi loans
+    const repledgeLinks = girviIds.length > 0
+      ? await db.repledgeLink.findMany({
+          where: { girviId: { in: girviIds } },
+          include: {
+            loan: true,
+          },
+        })
+      : [];
+
+    // Format Sales History
+    let totalSalesPaise = BigInt(0);
+    const formattedSales = customer.sales.map((s) => {
+      totalSalesPaise += s.totalPaise;
+      return {
+        id: s.id,
+        invoiceNo: s.invoiceNo,
+        date: s.date.toISOString().split('T')[0],
+        totalRupees: paiseToRupees(s.totalPaise),
+        totalPaise: s.totalPaise.toString(),
+        paidRupees: paiseToRupees(s.paidPaise),
+        oldGoldAdjRupees: paiseToRupees(s.oldGoldAdjPaise),
+        status: s.status,
+        itemsCount: s.items.length,
+        items: s.items.map((i) => ({
+          name: i.name,
+          metal: i.metal,
+          grossWeightGrams: mgToGrams(i.grossWeightMg),
+          netWeightGrams: mgToGrams(i.netWeightMg),
+          totalRupees: paiseToRupees(i.totalPaise),
+        })),
+      };
+    });
+
+    // Format Girvi Loans History
+    let activeGirviCount = 0;
+    let activeGirviPrincipalPaise = BigInt(0);
+    let totalPledgedNetWeightMg = 0;
+
+    const formattedGirvis = customer.girviLoans.map((g) => {
+      const isActive = g.status === 'ACTIVE' || g.status === 'PARTIAL';
+      if (isActive) {
+        activeGirviCount++;
+        activeGirviPrincipalPaise += g.principalPaise;
+      }
+
+      let loanNetMg = 0;
+      let loanValuationPaise = BigInt(0);
+      const items = g.items.map((i) => {
+        loanNetMg += i.netWeightMg;
+        totalPledgedNetWeightMg += i.netWeightMg;
+        loanValuationPaise += i.valuationPaise;
+
+        return {
+          id: i.id,
+          ornamentType: i.ornamentType,
+          metal: i.metal,
+          purity: i.purity,
+          grossWeightGrams: mgToGrams(i.grossWeightMg),
+          netWeightGrams: mgToGrams(i.netWeightMg),
+          valuationRupees: paiseToRupees(i.valuationPaise),
+          locationName: i.location?.name || 'Vault',
+        };
+      });
+
+      // Find if this specific girvi is repledged
+      const linkedRepledges = repledgeLinks.filter((rl) => rl.girviId === g.id);
+
+      return {
+        id: g.id,
+        loanNo: g.loanNo,
+        date: g.date.toISOString().split('T')[0],
+        dueDate: g.dueDate ? g.dueDate.toISOString().split('T')[0] : null,
+        principalRupees: paiseToRupees(g.principalPaise),
+        principalPaise: g.principalPaise.toString(),
+        interestRatePerMonthPct: Number(g.interestRatePerMonthPct),
+        status: g.status,
+        netWeightGrams: mgToGrams(loanNetMg),
+        valuationRupees: paiseToRupees(loanValuationPaise),
+        items,
+        isRepledged: linkedRepledges.some((r) => r.loan.status === 'ACTIVE' && r.returnedOn === null),
+        repledgeInfo: linkedRepledges.map((r) => ({
+          repledgeLoanNo: r.loan.loanNo,
+          financierVendorId: r.loan.vendorId,
+          status: r.loan.status,
+          sentOn: r.sentOn ? r.sentOn.toISOString().split('T')[0] : null,
+          returnedOn: r.returnedOn ? r.returnedOn.toISOString().split('T')[0] : null,
+          allocatedRupees: paiseToRupees(r.allocatedPrincipalPaise),
+        })),
+      };
+    });
+
+    // Format Repledged Exposure
+    const formattedRepledges = repledgeLinks.map((rl) => ({
+      linkId: rl.id,
+      repledgeLoanNo: rl.loan.loanNo,
+      girviLoanNo: customer.girviLoans.find((g) => g.id === rl.girviId)?.loanNo || rl.girviId,
+      financierVendorId: rl.loan.vendorId,
+      weightNetGrams: mgToGrams(rl.weightNetMg),
+      allocatedRupees: paiseToRupees(rl.allocatedPrincipalPaise),
+      status: rl.loan.status,
+      isReturned: rl.returnedOn !== null,
+      sentOn: rl.sentOn ? rl.sentOn.toISOString().split('T')[0] : null,
+      returnedOn: rl.returnedOn ? rl.returnedOn.toISOString().split('T')[0] : null,
     }));
+
+    // Customer 360 Summary Metrics
+    const summary = {
+      totalSalesRupees: paiseToRupees(totalSalesPaise),
+      salesCount: customer.sales.length,
+      activeGirviCount,
+      activeGirviPrincipalRupees: paiseToRupees(activeGirviPrincipalPaise),
+      totalPledgedNetWeightGrams: mgToGrams(totalPledgedNetWeightMg),
+      activeRepledgedCount: formattedRepledges.filter((r) => !r.isReturned && r.status === 'ACTIVE').length,
+    };
 
     return NextResponse.json({
       ok: true,
       data: {
         ...customer,
+        creditLimitRupees: paiseToRupees(customer.creditLimitPaise),
         creditLimitPaise: customer.creditLimitPaise.toString(),
         dob: customer.dob ? customer.dob.toISOString().split('T')[0] : null,
         sales: formattedSales,
+        girviLoans: formattedGirvis,
+        repledges: formattedRepledges,
+        summary,
       },
     });
   } catch (error: any) {
-    return NextResponse.json({ ok: false, error: 'Failed to fetch customer' }, { status: 500 });
+    console.error('Fetch customer 360 error:', error);
+    return NextResponse.json({ ok: false, error: 'Failed to fetch customer 360 profile' }, { status: 500 });
   }
 }
 
@@ -87,46 +211,29 @@ export async function PUT(
       identityDocNumber,
       identityDocPhotoUrl,
       tag,
-      creditLimitPaise,
       notes,
-      pinVerified,
     } = body;
-
-    const isIdentityChange =
-      (name && name !== existing.name) ||
-      (phone && phone !== existing.phone) ||
-      (relationName && relationName !== existing.relationName);
-
-    if (isIdentityChange && user.role === 'STAFF' && !pinVerified) {
-      return NextResponse.json(
-        { ok: false, error: 'PIN verification required to update core customer identity', requiresPin: true },
-        { status: 403 }
-      );
-    }
-
-    const cleanPhone = phone ? phone.replace(/\D/g, '') : existing.phone;
 
     const updated = await db.customer.update({
       where: { id: params.id },
       data: {
-        name: name !== undefined ? name.trim() : existing.name,
-        nameHindi: nameHindi !== undefined ? (nameHindi?.trim() || null) : existing.nameHindi,
-        phone: cleanPhone,
-        altPhone: altPhone !== undefined ? (altPhone?.replace(/\D/g, '') || null) : existing.altPhone,
-        dob: dob !== undefined ? (dob ? new Date(dob) : null) : existing.dob,
-        relationType: relationType !== undefined ? (relationType as RelationType) : existing.relationType,
-        relationName: relationName !== undefined ? (relationName?.trim() || null) : existing.relationName,
-        address: address !== undefined ? (address?.trim() || null) : existing.address,
-        city: city !== undefined ? city.trim() : existing.city,
-        pincode: pincode !== undefined ? (pincode?.trim() || null) : existing.pincode,
-        photoUrl: photoUrl !== undefined ? photoUrl : existing.photoUrl,
-        photoDriveUrl: photoDriveUrl !== undefined ? photoDriveUrl?.trim() : existing.photoDriveUrl,
-        identityDocType: identityDocType !== undefined ? identityDocType?.trim() : existing.identityDocType,
-        identityDocNumber: identityDocNumber !== undefined ? identityDocNumber?.trim() : existing.identityDocNumber,
-        identityDocPhotoUrl: identityDocPhotoUrl !== undefined ? identityDocPhotoUrl : existing.identityDocPhotoUrl,
-        tag: tag !== undefined ? (tag as CustomerTag) : existing.tag,
-        creditLimitPaise: creditLimitPaise !== undefined ? BigInt(creditLimitPaise) : existing.creditLimitPaise,
-        notes: notes !== undefined ? (notes?.trim() || null) : existing.notes,
+        name: name ? name.trim() : existing.name,
+        nameHindi: nameHindi !== undefined ? nameHindi?.trim() || null : existing.nameHindi,
+        phone: phone ? phone.trim() : existing.phone,
+        altPhone: altPhone !== undefined ? altPhone?.trim() || null : existing.altPhone,
+        dob: dob ? new Date(dob) : existing.dob,
+        relationType: relationType ? (relationType as RelationType) : existing.relationType,
+        relationName: relationName !== undefined ? relationName?.trim() || null : existing.relationName,
+        address: address !== undefined ? address?.trim() || null : existing.address,
+        city: city !== undefined ? city?.trim() || 'Local' : existing.city,
+        pincode: pincode !== undefined ? pincode?.trim() || null : existing.pincode,
+        photoUrl: photoUrl !== undefined ? photoUrl?.trim() || null : existing.photoUrl,
+        photoDriveUrl: photoDriveUrl !== undefined ? photoDriveUrl?.trim() || null : existing.photoDriveUrl,
+        identityDocType: identityDocType !== undefined ? identityDocType?.trim() || null : existing.identityDocType,
+        identityDocNumber: identityDocNumber !== undefined ? identityDocNumber?.trim() || null : existing.identityDocNumber,
+        identityDocPhotoUrl: identityDocPhotoUrl !== undefined ? identityDocPhotoUrl?.trim() || null : existing.identityDocPhotoUrl,
+        tag: tag ? (tag as CustomerTag) : existing.tag,
+        notes: notes !== undefined ? notes?.trim() || null : existing.notes,
       },
     });
 
@@ -135,58 +242,13 @@ export async function PUT(
       action: 'UPDATE_CUSTOMER',
       entity: 'Customer',
       entityId: updated.id,
-      before: { name: existing.name, phone: existing.phone, tag: existing.tag },
-      after: { name: updated.name, phone: updated.phone, tag: updated.tag },
+      before: existing,
+      after: updated,
     });
 
-    return NextResponse.json({
-      ok: true,
-      data: {
-        ...updated,
-        creditLimitPaise: updated.creditLimitPaise.toString(),
-        dob: updated.dob ? updated.dob.toISOString().split('T')[0] : null,
-      },
-    });
+    return NextResponse.json({ ok: true, data: updated });
   } catch (error: any) {
     console.error('Update customer error:', error);
-    return NextResponse.json({ ok: false, error: 'Failed to update customer' }, { status: 500 });
-  }
-}
-
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (user.role !== 'OWNER' && user.role !== 'MANAGER') {
-      return NextResponse.json({ ok: false, error: 'Only Owner or Manager can delete customers' }, { status: 403 });
-    }
-
-    const salesCount = await db.sale.count({ where: { customerId: params.id } });
-    if (salesCount > 0) {
-      return NextResponse.json(
-        { ok: false, error: 'Cannot delete customer with existing sales history. Tag customer as BLOCKED instead.' },
-        { status: 400 }
-      );
-    }
-
-    const deleted = await db.customer.delete({ where: { id: params.id } });
-
-    await writeAuditLog({
-      userId: user.id,
-      action: 'DELETE_CUSTOMER',
-      entity: 'Customer',
-      entityId: params.id,
-      before: { name: deleted.name, phone: deleted.phone },
-    });
-
-    return NextResponse.json({ ok: true });
-  } catch (error: any) {
-    return NextResponse.json({ ok: false, error: 'Failed to delete customer' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: error.message || 'Failed to update customer' }, { status: 500 });
   }
 }

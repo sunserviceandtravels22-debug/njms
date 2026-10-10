@@ -39,11 +39,13 @@ export default function AlertsPage() {
   const [moduleFilter, setModuleFilter] = useState<string>('ALL');
   const [severityFilter, setSeverityFilter] = useState<string>('ALL');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   const fetchAlerts = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/alerts?status=${tab}`);
+      const res = await fetch(`/api/v1/alerts?status=${tab}`, { credentials: 'include' });
       const json = await res.json();
       if (json.ok) {
         setAlerts(json.data || []);
@@ -52,6 +54,28 @@ export default function AlertsPage() {
       // ignore
     } finally {
       setLoading(false);
+    }
+  };
+
+  const syncAlerts = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/v1/alerts/sync', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSyncResult(data.message || 'Sync complete');
+        fetchAlerts();
+      } else {
+        setSyncResult(`Sync failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      setSyncResult(`Sync error: ${err.message}`);
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -107,7 +131,7 @@ export default function AlertsPage() {
   const modules = Array.from(new Set(alerts.map((a) => a.rule.module)));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-28">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -119,15 +143,32 @@ export default function AlertsPage() {
             Real-time shop alerts, variance checks, and operational exceptions (D12-ALT)
           </p>
         </div>
-        <button
-          onClick={fetchAlerts}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface hover:bg-surface-2 text-sm font-medium transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchAlerts}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface hover:bg-surface-2 text-sm font-medium transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+          <button
+            onClick={syncAlerts}
+            disabled={syncing}
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-colors shadow-sm"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing…' : 'Sync Alerts'}
+          </button>
+        </div>
       </div>
+
+      {syncResult && (
+        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 text-xs font-medium flex items-center justify-between">
+          <span>{syncResult}</span>
+          <button onClick={() => setSyncResult(null)} className="ml-3 underline opacity-70 hover:opacity-100 text-xs">dismiss</button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b border-border space-x-6 text-sm font-medium">
@@ -146,6 +187,7 @@ export default function AlertsPage() {
           </button>
         ))}
       </div>
+
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">

@@ -23,6 +23,9 @@ import {
   Wallet,
   Building2,
   Warehouse,
+  Receipt,
+  Coins,
+  ScrollText,
 } from 'lucide-react';
 import { SaveIndicator } from '../ui/SaveIndicator';
 import { AlertBell } from '../AlertBell';
@@ -71,12 +74,14 @@ export const AppShell: React.FC<AppShellProps> = ({
 
   const navItems = [
     { label: 'Home', href: '/dashboard', icon: Home },
-    { label: 'Sell', href: '/pos', icon: ShoppingBag, highlight: true },
+    { label: 'Sell (POS)', href: '/pos', icon: ShoppingBag, highlight: true },
     { label: 'Customers', href: '/customers', icon: Users },
-    { label: 'Girvi', href: '/girvi', icon: ShieldCheck },
+    { label: 'Girvi Loans', href: '/girvi', icon: ShieldCheck },
   ];
 
   const moreItems = [
+    { label: 'Sales History', href: '/sales', icon: Receipt },
+    { label: 'Old Metal & Exchange', href: '/old-gold', icon: Coins },
     { label: 'Alerts', href: '/alerts', icon: Bell },
     { label: 'Cash Flow', href: '/cashbook', icon: Wallet },
     { label: 'Re-pledge', href: '/repledge', icon: Building2 },
@@ -84,6 +89,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     { label: 'Credit (Udhaar)', href: '/credit', icon: CreditCard },
     { label: 'Inventory', href: '/inventory', icon: Package },
     { label: 'Barcode Studio', href: '/barcode', icon: Barcode },
+    { label: 'Audit Log', href: '/audit-log', icon: ScrollText },
     { label: 'Reports', href: '/reports', icon: FileText },
     { label: 'Settings', href: '/settings', icon: Settings },
   ];

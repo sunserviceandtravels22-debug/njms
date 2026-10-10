@@ -32,11 +32,11 @@ export default function SKUMasterPage() {
     active: true,
   });
 
-  const categories = ['Ring', 'Chain', 'Bangle', 'Necklace', 'Earring', 'Coin', 'Payal', 'Other'];
+  const categories = ['Ring', 'Chain', 'Bangle', 'Necklace', 'Earring', 'Coin', 'Payal', 'Mangalsutra', 'Kada', 'Jhumka', 'Pendant', 'Nosepin', 'Bracelet'];
 
   const loadSKUs = async () => {
     try {
-      const res = await fetch('/api/v1/inventory/sku');
+      const res = await fetch('/api/v1/inventory/sku', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         if (data.ok && Array.isArray(data.data)) {
@@ -268,16 +268,32 @@ export default function SKUMasterPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-text-muted block mb-1">Category</label>
-                  <select
+                  <label className="text-xs font-bold text-text-muted block mb-1">Category (Custom or Preset)</label>
+                  <input
+                    type="text"
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full p-3 bg-surface-2 border border-border rounded-xl text-xs font-bold text-text"
-                  >
+                    placeholder="e.g. Ring, Custom Kada..."
+                    list="category-suggestions"
+                    className="w-full p-3 bg-surface-2 border border-border rounded-xl text-xs font-bold text-text outline-none focus:border-primary"
+                  />
+                  <datalist id="category-suggestions">
                     {categories.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                      <option key={c} value={c} />
                     ))}
-                  </select>
+                  </datalist>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {['Ring', 'Chain', 'Necklace', 'Bangle', 'Earring'].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, category: c })}
+                        className="px-2 py-0.5 rounded-md bg-surface border border-border text-[10px] text-text-muted hover:bg-primary/10 hover:text-primary transition"
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

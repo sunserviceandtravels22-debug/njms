@@ -22,8 +22,19 @@ export async function GET(req: NextRequest) {
 
     const q = query.trim().toLowerCase();
 
+    // Find all currently active repledged girvi IDs to prevent duplicate repledging
+    const activeLinks = await db.repledgeLink.findMany({
+      where: {
+        loan: { status: 'ACTIVE' },
+        returnedOn: null,
+      },
+      select: { girviId: true },
+    });
+    const activeRepledgedGirviIds = new Set(activeLinks.map((l) => l.girviId));
+
     const loans = await db.girviLoan.findMany({
       where: {
+        status: { in: ['ACTIVE', 'PARTIAL'] },
         OR: [
           { loanNo: { contains: q } },
           { customer: { name: { contains: q } } },
@@ -35,10 +46,13 @@ export async function GET(req: NextRequest) {
         customer: true,
         items: true,
       },
-      take: 20,
+      take: 25,
     });
 
-    const results = loans.map((l) => {
+    // Filter out actively repledged loans
+    const availableLoans = loans.filter((l) => !activeRepledgedGirviIds.has(l.id));
+
+    const results = availableLoans.map((l) => {
       const principalRupees = paiseToRupees(l.principalPaise);
       const customerRatePm = Number(l.interestRatePerMonthPct) || 1.5;
       const offeredRupees = Math.round(principalRupees * 0.75); // default offered 75%
@@ -71,19 +85,27 @@ export async function GET(req: NextRequest) {
         rateGapPpPm: figures.rateGapPpPm,
         rupeeSpreadMonthly: paiseToRupees(figures.rupeeSpreadMonthlyPaise),
         ownCapitalRupees: paiseToRupees(figures.ownCapitalPaise),
-        ltvPct: figures.ltvPct,
+        ltvPct: Math.round(figures.ltvPct),
         isLosingMoney: figures.isLosingMoney,
         totalGrossGrams,
         totalNetGrams,
         totalValuationRupees,
         status: l.status,
         itemCount: l.items.length,
-        articlesSummary: l.items.map((i) => `${i.ornamentType} (${mgToGrams(i.grossWeightMg).toFixed(1)}g)`).join(', '),
+        articlesSummary: l.items.map((i) => i.ornamentType).join(', '),
+        items: l.items.map((i) => ({
+          id: i.id,
+          ornamentType: i.ornamentType,
+          grossWeightGrams: mgToGrams(i.grossWeightMg),
+          netWeightGrams: mgToGrams(i.netWeightMg),
+          valuationRupees: paiseToRupees(i.valuationPaise),
+        })),
       };
     });
 
     return NextResponse.json({ ok: true, data: results });
   } catch (error: any) {
-    return NextResponse.json({ ok: false, error: error.message || 'Search error' }, { status: 500 });
+    console.error('Form search error:', error);
+    return NextResponse.json({ ok: false, error: error.message || 'Search failed' }, { status: 500 });
   }
 }
