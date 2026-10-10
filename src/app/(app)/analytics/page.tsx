@@ -15,7 +15,7 @@ import {
   HelpCircle,
   Calendar,
 } from 'lucide-react';
-import { formatMoney } from '@/domain/money';
+import { formatMoney } from '../../../domain/money';
 
 interface AnalyticsData {
   kpis: {

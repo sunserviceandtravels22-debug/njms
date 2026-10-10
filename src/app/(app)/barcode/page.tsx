@@ -15,16 +15,16 @@ import {
   BarcodeConfig,
   PageSetup,
   PageSizeType,
-} from '@/lib/barcode/types';
+} from '../../../lib/barcode/types';
 import {
   DPI_OPTIONS,
   PAGE_SIZES,
   LABEL_TEMPLATES,
   FORMAT_GROUPS,
   UNIT_FACTORS,
-} from '@/lib/barcode/constants';
-import { validateBarcode, renderBarcodeToDataUrl } from '@/lib/barcode/barcodeGenerator';
-import { calculateGrid, exportAsPdf, exportAsZip } from '@/lib/barcode/exportService';
+} from '../../../lib/barcode/constants';
+import { validateBarcode, renderBarcodeToDataUrl } from '../../../lib/barcode/barcodeGenerator';
+import { calculateGrid, exportAsPdf, exportAsZip } from '../../../lib/barcode/exportService';
 import {
   Barcode as BarcodeIcon,
   Download,
