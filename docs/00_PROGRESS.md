@@ -11,12 +11,13 @@
 | 2026-10-09 | Module 12 & 13 Integration: RateSnapshot versioning, ActivityLog SHA-256 chain, Alert Engine, C-122 MultiSelectList, ItemClass/TrackingMode, Wholesaler Memo-In & Settlement Queue | 12, 13, 03 |
 | 2026-10-09 | GitHub repo created & synced: https://github.com/sunserviceandtravels22-debug/njms | 00_PROGRESS |
 | 2026-10-09 | Hostinger MariaDB (srv2209.hstgr.io:3306/u148306822_njms) live verified: 54 tables created via `prisma db push`, initial seed executed (Owner user, fund accounts, cash categories, storage locations) | HOSTINGER_DEPLOYMENT_GUIDE |
+| 2026-10-10 | Doc 14 Hostinger Deployment & Database Connectivity Pack implemented: BigInt-safe JSON serialization (`src/lib/json.ts`, server polyfill), adaptive reverse-proxy auth cookies, HealthProbe model & baseline migration `20261010000000_init` applied to Hostinger DB, fail-fast env schema, persistent uploads (`src/lib/storage.ts`), /api/health and /api/health/db, verification scripts (db:check, db:deploy, verify:deploy), DEPLOYMENT_FINDINGS.md, DEPLOY_RUNBOOK.md, ROLLBACK.md | 14_HOSTINGER_DEPLOYMENT_DB_CONNECTIVITY, DEPLOYMENT_FINDINGS, DEPLOY_RUNBOOK |
 | | Girvi compounding convention (periods restart at each payment): **pending owner confirmation** | 03 §8.4 |
 
 ## Open questions (from PRD §9)
 | # | Question | Answer | Blocks |
 |---|---|---|---|
-| 1 | Exact Hostinger plan (Node.js + MySQL)? | | M1 |
+| 1 | Exact Hostinger plan (Node.js + MySQL)? | Hostinger Managed Node.js Web App (Node 20.x LTS) + MariaDB 11.8.9-MariaDB-log on srv2209.hstgr.io:3306 | Resolved (Doc 14) |
 | 2 | Label printer model / roll size, scanner model? | | M4 |
 | 3 | State, pawnbroker licence, rate caps, notice periods? | | M7 |
 | 4 | GST registration, HSN, HUID applicability? | | M5 |

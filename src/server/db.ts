@@ -1,21 +1,29 @@
+// Implements: Doc 14 §9 & §10
+
 import { PrismaClient } from '@prisma/client';
 
-// The DATABASE_URL is read from the environment.
-// On Hostinger: set it in Node.js Application Manager -> Environment Variables
-// or place it in the .env file in your project root.
-//
-// Correct format for Hostinger MySQL with special characters in password:
-//   mysql://u148306822_admin:%2FYREd%5ExERMb_%24q8@srv2209.hstgr.io:3306/u148306822_njms?connection_limit=10&connect_timeout=30
-//
-// Note: Special characters in the password must be URL-encoded:
-//   /  →  %2F     ^  →  %5E     $  →  %24
+// Global BigInt JSON serialization polyfill
+if (typeof BigInt !== 'undefined' && !(BigInt.prototype as any).toJSON) {
+  (BigInt.prototype as any).toJSON = function (this: bigint) {
+    return this.toString();
+  };
+}
+
+// Recommended Hostinger URL format with connection_limit=5 to prevent connection exhaustion
+export const DEFAULT_HOSTINGER_DB_URL =
+  'mysql://u148306822_admin:%2FYREd%5ExERMb_%24q8@srv2209.hstgr.io:3306/u148306822_njms?connection_limit=5&pool_timeout=20&connect_timeout=15';
 
 export function resolveDatabaseUrl(): string {
   const url = process.env.DATABASE_URL ?? '';
 
   if (!url || url.includes('njms_dev') || url.includes('root:password@localhost')) {
-    // Hardcoded Hostinger fallback — keeps the app alive even if .env is missing on server
-    return 'mysql://u148306822_admin:%2FYREd%5ExERMb_%24q8@srv2209.hstgr.io:3306/u148306822_njms?connection_limit=10&connect_timeout=30';
+    return DEFAULT_HOSTINGER_DB_URL;
+  }
+
+  // Ensure connection_limit is tuned if not present
+  if (!url.includes('connection_limit=')) {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}connection_limit=5&pool_timeout=20&connect_timeout=15`;
   }
 
   return url;
@@ -26,6 +34,7 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 const dbUrl = resolveDatabaseUrl();
+process.env.DATABASE_URL = dbUrl;
 
 export const db =
   globalForPrisma.prisma ??
@@ -36,4 +45,6 @@ export const db =
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   });
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db;
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = db;
+}

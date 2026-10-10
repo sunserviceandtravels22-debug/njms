@@ -210,6 +210,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       data: {
         ...loan,
+        principalPaise: loan.principalPaise.toString(),
         principalRupees: pRupees,
         date: loan.date.toISOString().split('T')[0],
       },

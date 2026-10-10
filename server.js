@@ -4,6 +4,13 @@
 
 'use strict';
 
+// Monkeypatch BigInt for JSON serialization across entire Node.js server
+if (typeof BigInt !== 'undefined' && !BigInt.prototype.toJSON) {
+  BigInt.prototype.toJSON = function () {
+    return this.toString();
+  };
+}
+
 const path = require('path');
 const fs = require('fs');
 

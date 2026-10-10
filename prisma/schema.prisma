@@ -1409,6 +1409,10 @@ model LossSettlement {
   at                         DateTime @default(now())
 }
 
-
-
-
+// Health probe table used only by /api/health/db and verify-deploy (Doc 14 §8):
+model HealthProbe {
+  id          String   @id @default(cuid())
+  note        String   @db.VarChar(200)
+  amountPaise BigInt
+  createdAt   DateTime @default(now())
+}

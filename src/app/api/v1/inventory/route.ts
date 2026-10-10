@@ -149,6 +149,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       data: {
         ...newItem,
+        makingValuePaise: newItem.makingValuePaise.toString(),
         grossWeightGrams: grossG,
         netWeightGrams: mgToGrams(netMg),
         makingValueRupees: parseFloat(makingValueRupees) || 0,

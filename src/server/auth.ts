@@ -31,9 +31,16 @@ export async function createSession(userId: string, device?: string, ip?: string
   });
 
   const cookieStore = cookies();
+  // If APP_URL is http or explicitly set to non-secure, allow cookie over HTTP; otherwise secure in production
+  const isExplicitHttp =
+    (process.env.APP_URL && process.env.APP_URL.startsWith('http:')) ||
+    (process.env.APP_BASE_URL && process.env.APP_BASE_URL.startsWith('http:')) ||
+    process.env.COOKIE_SECURE === 'false';
+  const isSecure = process.env.NODE_ENV === 'production' && !isExplicitHttp;
+
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecure,
     sameSite: 'lax',
     expires: expiresAt,
     path: '/',
