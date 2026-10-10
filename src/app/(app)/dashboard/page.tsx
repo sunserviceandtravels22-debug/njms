@@ -322,7 +322,7 @@ export default function DashboardPage() {
           {
             title: 'Vault Valuation',
             value: loading ? '—' : data ? formatINR(data.vaultValuePaise) : '₹0',
-            count: loading ? '' : data ? `${data.totalStockCount} items · ${data.totalGoldWeightGrams ? data.totalGoldWeightGrams.toFixed(1) + 'g Au' : '0g Au'}` : '0 items',
+            count: loading ? '' : data ? `${data.totalStockCount} items · ${parseFloat(data.totalGoldWeightGrams || 0).toFixed(1)}g Au` : '0 items',
             icon: Layers,
             color: 'text-sky-700 bg-sky-50 border-sky-200',
           },
