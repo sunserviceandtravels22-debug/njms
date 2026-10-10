@@ -8,8 +8,9 @@ const nextConfig = {
   output: 'standalone',
 
   // Prevent Prisma Client and native modules from being bundled into client/edge bundles
-  // serverExternalPackages is the stable API in Next.js 14.1+
-  serverExternalPackages: ['@prisma/client', 'bcryptjs'],
+  experimental: {
+    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs'],
+  },
 
   eslint: {
     ignoreDuringBuilds: true,

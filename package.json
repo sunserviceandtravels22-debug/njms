@@ -21,7 +21,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "deploy:hostinger": "npm run build && echo 'Build complete. Upload .next, server.js, package.json, prisma/ to Hostinger.'",
-    "postinstall": "prisma generate --no-engine || prisma generate"
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

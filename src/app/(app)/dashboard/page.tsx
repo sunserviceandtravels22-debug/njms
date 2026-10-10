@@ -30,8 +30,9 @@ export default function DashboardPage() {
 
   // Rate editor
   const [showRateEditor, setShowRateEditor] = useState(false);
-  const [newGoldRate, setNewGoldRate] = useState('');    // ₹/10g
-  const [newSilverRate, setNewSilverRate] = useState(''); // ₹/kg
+  const [newGoldRate, setNewGoldRate] = useState('');     // 24K ₹/10g
+  const [newGold22Rate, setNewGold22Rate] = useState(''); // 22K ₹/10g
+  const [newSilverRate, setNewSilverRate] = useState(''); // Silver ₹/1kg
   const [rateSaving, setRateSaving] = useState(false);
   const [rateSaved, setRateSaved] = useState(false);
 
@@ -45,11 +46,22 @@ export default function DashboardPage() {
       if (json.ok) {
         setData(json.data);
         setLastRefresh(new Date());
-        // Pre-fill rate editor from DB
-        const gold = json.data.rates?.find((r: any) => r.metal === 'GOLD');
+        // Pre-fill rate editor from DB rates
+        const gold24 = json.data.rates?.find((r: any) => r.metal === 'GOLD' && r.purityPpt >= 999);
+        const gold22 = json.data.rates?.find((r: any) => r.metal === 'GOLD' && r.purityPpt === 916);
         const silver = json.data.rates?.find((r: any) => r.metal === 'SILVER');
-        if (gold) setNewGoldRate(String(Math.round(gold.rateRupeesPerGram * 10)));
-        if (silver) setNewSilverRate(String(Math.round(silver.rateRupeesPerGram * 1000)));
+
+        if (gold24) {
+          setNewGoldRate(String(Math.round(gold24.rateRupeesPerGram * 10)));
+        }
+        if (gold22) {
+          setNewGold22Rate(String(Math.round(gold22.rateRupeesPerGram * 10)));
+        } else if (gold24) {
+          setNewGold22Rate(String(Math.round(gold24.rateRupeesPerGram * 9.16)));
+        }
+        if (silver) {
+          setNewSilverRate(String(Math.round(silver.rateRupeesPerGram * 1000)));
+        }
       } else {
         setError(json.error || 'Failed to load dashboard data');
       }
@@ -62,44 +74,67 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
+  const handleGold24Change = (val: string) => {
+    setNewGoldRate(val);
+    const num = parseFloat(val);
+    if (num && num > 0) {
+      setNewGold22Rate(String(Math.round(num * 0.916)));
+    }
+  };
+
   const handleUpdateRates = async () => {
-    const gVal = parseFloat(newGoldRate) / 10;    // ₹/g
-    const sVal = parseFloat(newSilverRate) / 1000; // ₹/g
-    if (!gVal || !sVal || gVal <= 0 || sVal <= 0) return;
+    const g24Val = parseFloat(newGoldRate) / 10;     // ₹/g
+    const g22Val = parseFloat(newGold22Rate) / 10;   // ₹/g
+    const sVal = parseFloat(newSilverRate) / 1000;   // ₹/g
+    if (!g24Val || !sVal || g24Val <= 0 || sVal <= 0) return;
 
     setRateSaving(true);
     try {
-      await Promise.all([
-        fetch('/api/v1/rates', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ metal: 'GOLD', purityPpt: 999, rateRupeesPerGram: gVal }),
+      const res = await fetch('/api/v1/rates', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rates: [
+            { metal: 'GOLD', purityPpt: 999, rateRupeesPerGram: g24Val },
+            { metal: 'GOLD', purityPpt: 916, rateRupeesPerGram: g22Val > 0 ? g22Val : Math.round(g24Val * 0.916) },
+            { metal: 'SILVER', purityPpt: 999, rateRupeesPerGram: sVal },
+          ],
         }),
-        fetch('/api/v1/rates', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ metal: 'SILVER', purityPpt: 999, rateRupeesPerGram: sVal }),
-        }),
-      ]);
+      });
+
+      const resJson = await res.json();
+      if (!resJson.ok) {
+        throw new Error(resJson.error || 'Failed to save rates');
+      }
+
       setRateSaved(true);
       setShowRateEditor(false);
-      fetchDashboard(); // Refresh all data
+      await fetchDashboard(); // Refresh all data from DB
       setTimeout(() => setRateSaved(false), 3000);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Rate update failed', e);
+      alert('Failed to update rates: ' + (e.message || 'Server error'));
     } finally {
       setRateSaving(false);
     }
   };
 
   // Derived display values from DB rates
-  const goldRate10g = data?.rates?.find((r: any) => r.metal === 'GOLD')?.rateRupeesPerGram
-    ? Math.round(data.rates.find((r: any) => r.metal === 'GOLD').rateRupeesPerGram * 10)
-    : null;
-  const silverRate1kg = data?.rates?.find((r: any) => r.metal === 'SILVER')?.rateRupeesPerGram
-    ? Math.round(data.rates.find((r: any) => r.metal === 'SILVER').rateRupeesPerGram * 1000)
+  const gold24Row = data?.rates?.find((r: any) => r.metal === 'GOLD' && r.purityPpt >= 999);
+  const gold22Row = data?.rates?.find((r: any) => r.metal === 'GOLD' && r.purityPpt === 916);
+  const silverRow = data?.rates?.find((r: any) => r.metal === 'SILVER');
+
+  const goldRate10g = gold24Row?.rateRupeesPerGram
+    ? Math.round(gold24Row.rateRupeesPerGram * 10)
+    : (gold22Row?.rateRupeesPerGram ? Math.round((gold22Row.rateRupeesPerGram / 0.916) * 10) : null);
+
+  const gold22Rate10g = gold22Row?.rateRupeesPerGram
+    ? Math.round(gold22Row.rateRupeesPerGram * 10)
+    : (gold24Row?.rateRupeesPerGram ? Math.round(gold24Row.rateRupeesPerGram * 9.16) : null);
+
+  const silverRate1kg = silverRow?.rateRupeesPerGram
+    ? Math.round(silverRow.rateRupeesPerGram * 1000)
     : null;
 
   return (
@@ -135,69 +170,121 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Live Metal Rates */}
+      {/* Live Metal Rates from Database */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Gold */}
-        <div className="bg-surface border border-border p-6 rounded-2xl shadow-xs flex flex-col justify-between">
-          <div className="flex justify-between items-center">
+        <div className="bg-surface border border-border p-6 rounded-2xl shadow-xs flex flex-col justify-between hover:border-amber-400/50 transition-all">
+          <div className="flex justify-between items-start">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">
-                  Gold Rate (Today)
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={`w-2.5 h-2.5 rounded-full ${data?.isRatesSetToday ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                <span className="text-[11px] font-bold uppercase tracking-widest text-amber-600">
+                  Gold Rate {data?.isRatesSetToday ? '(Live Today)' : '(Last Saved)'}
+                </span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${data?.isRatesSetToday ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                  {data?.isRatesSetToday ? 'Today' : 'Needs Today Update'}
                 </span>
               </div>
-              <h3 className="text-3xl font-extrabold text-text tracking-tight">
-                {goldRate10g != null
-                  ? `₹${goldRate10g.toLocaleString('en-IN')}`
-                  : <span className="text-text-muted text-lg">Not set today</span>}
-                {goldRate10g != null && <span className="text-xs font-semibold text-text-muted ml-1">/ 10g</span>}
-              </h3>
+              <div className="flex items-baseline gap-3 mt-1">
+                <div>
+                  <span className="text-xs font-bold text-text-muted uppercase">24K Fine</span>
+                  <h3 className="text-3xl font-extrabold text-text tracking-tight">
+                    {goldRate10g != null
+                      ? `₹${goldRate10g.toLocaleString('en-IN')}`
+                      : <span className="text-text-muted text-lg">Not set</span>}
+                    {goldRate10g != null && <span className="text-xs font-semibold text-text-muted ml-1">/ 10g</span>}
+                  </h3>
+                </div>
+                {gold22Rate10g != null && (
+                  <div className="border-l border-border pl-3">
+                    <span className="text-xs font-bold text-text-muted uppercase">22K (916)</span>
+                    <h4 className="text-xl font-bold text-text tracking-tight">
+                      ₹{gold22Rate10g.toLocaleString('en-IN')}
+                      <span className="text-[11px] font-semibold text-text-muted ml-1">/ 10g</span>
+                    </h4>
+                  </div>
+                )}
+              </div>
             </div>
             <button
               onClick={() => setShowRateEditor(true)}
-              className="p-3 bg-surface-2 hover:bg-border rounded-xl border border-border text-text transition-all"
-              title="Update today's gold & silver rates"
+              className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl border border-amber-200 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs"
+              title="Change metal rates in database"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-3.5 h-3.5" />
+              <span>Change</span>
             </button>
           </div>
-          <div className="mt-4 pt-4 border-t border-border text-xs text-text-muted">
-            {goldRate10g != null
-              ? `₹${(goldRate10g / 10).toFixed(2)} per gram · click ⚙ to update`
-              : 'No rate set for today — click ⚙ to add'}
+          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-text-muted">
+            <span>
+              {goldRate10g != null
+                ? `₹${(goldRate10g / 10).toFixed(2)} / gram (24K)`
+                : 'No rate recorded yet'}
+            </span>
+            <button
+              onClick={() => setShowRateEditor(true)}
+              className="text-primary hover:underline font-semibold text-xs"
+            >
+              Edit in Database →
+            </button>
           </div>
         </div>
 
         {/* Silver */}
-        <div className="bg-surface border border-border p-6 rounded-2xl shadow-xs flex flex-col justify-between">
-          <div className="flex justify-between items-center">
+        <div className="bg-surface border border-border p-6 rounded-2xl shadow-xs flex flex-col justify-between hover:border-slate-400/50 transition-all">
+          <div className="flex justify-between items-start">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-2 h-2 rounded-full bg-slate-400 animate-ping" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                  Silver Rate (Today)
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={`w-2.5 h-2.5 rounded-full ${data?.isRatesSetToday ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                  Silver Rate {data?.isRatesSetToday ? '(Live Today)' : '(Last Saved)'}
+                </span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${data?.isRatesSetToday ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>
+                  {data?.isRatesSetToday ? 'Today' : 'Needs Today Update'}
                 </span>
               </div>
-              <h3 className="text-3xl font-extrabold text-text tracking-tight">
-                {silverRate1kg != null
-                  ? `₹${silverRate1kg.toLocaleString('en-IN')}`
-                  : <span className="text-text-muted text-lg">Not set today</span>}
-                {silverRate1kg != null && <span className="text-xs font-semibold text-text-muted ml-1">/ 1kg</span>}
-              </h3>
+              <div className="flex items-baseline gap-3 mt-1">
+                <div>
+                  <span className="text-xs font-bold text-text-muted uppercase">999 Fine</span>
+                  <h3 className="text-3xl font-extrabold text-text tracking-tight">
+                    {silverRate1kg != null
+                      ? `₹${silverRate1kg.toLocaleString('en-IN')}`
+                      : <span className="text-text-muted text-lg">Not set</span>}
+                    {silverRate1kg != null && <span className="text-xs font-semibold text-text-muted ml-1">/ 1kg</span>}
+                  </h3>
+                </div>
+                {silverRate1kg != null && (
+                  <div className="border-l border-border pl-3">
+                    <span className="text-xs font-bold text-text-muted uppercase">Per Gram</span>
+                    <h4 className="text-xl font-bold text-text tracking-tight">
+                      ₹{(silverRate1kg / 1000).toFixed(2)}
+                      <span className="text-[11px] font-semibold text-text-muted ml-1">/ g</span>
+                    </h4>
+                  </div>
+                )}
+              </div>
             </div>
             <button
               onClick={() => setShowRateEditor(true)}
-              className="p-3 bg-surface-2 hover:bg-border rounded-xl border border-border text-text transition-all"
-              title="Update today's rates"
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl border border-slate-300 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs"
+              title="Change silver rate in database"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-3.5 h-3.5" />
+              <span>Change</span>
             </button>
           </div>
-          <div className="mt-4 pt-4 border-t border-border text-xs text-text-muted">
-            {silverRate1kg != null
-              ? `₹${(silverRate1kg / 1000).toFixed(2)} per gram · click ⚙ to update`
-              : 'No rate set for today — click ⚙ to add'}
+          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-text-muted">
+            <span>
+              {silverRate1kg != null
+                ? `₹${silverRate1kg.toLocaleString('en-IN')} / kg`
+                : 'No silver rate recorded yet'}
+            </span>
+            <button
+              onClick={() => setShowRateEditor(true)}
+              className="text-primary hover:underline font-semibold text-xs"
+            >
+              Edit in Database →
+            </button>
           </div>
         </div>
       </div>
@@ -355,35 +442,78 @@ export default function DashboardPage() {
       {/* Rate Adjustment Modal */}
       {showRateEditor && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-border rounded-2xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
+          <div className="bg-surface border border-border rounded-2xl p-6 max-w-md w-full space-y-5 shadow-2xl">
             <div>
-              <h3 className="text-lg font-bold text-text">Update Today's Metal Rates</h3>
-              <p className="text-xs text-text-muted mt-1">Rates are stored in the database and used for all valuations</p>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-text">Update Today's Metal Rates</h3>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary">
+                  Live DB Sync
+                </span>
+              </div>
+              <p className="text-xs text-text-muted mt-1">
+                Rates are saved in the database and immediately update all shop valuations, POS billing, and girvi calculations.
+              </p>
             </div>
+
             <div className="space-y-4">
+              {/* 24K Gold */}
               <div>
-                <label className="text-xs font-bold text-text-muted block mb-1.5">
-                  Gold Rate (₹ per 10 grams)
-                </label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-xs font-bold text-text">
+                    Gold 24K Fine (₹ per 10 grams)
+                  </label>
+                  {newGoldRate && (
+                    <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                      ₹{(parseFloat(newGoldRate) / 10).toFixed(2)} / g
+                    </span>
+                  )}
+                </div>
                 <input
                   type="number"
                   min="1000"
                   step="100"
                   value={newGoldRate}
-                  onChange={(e) => setNewGoldRate(e.target.value)}
-                  placeholder="e.g. 72500"
+                  onChange={(e) => handleGold24Change(e.target.value)}
+                  placeholder="e.g. 74000"
                   className="w-full p-3 bg-surface-2 border border-border rounded-xl text-base font-bold text-text focus:ring-2 focus:ring-primary focus:outline-none"
                 />
-                {newGoldRate && (
-                  <p className="text-[11px] text-text-muted mt-1">
-                    = ₹{(parseFloat(newGoldRate) / 10).toFixed(2)} per gram
-                  </p>
-                )}
               </div>
+
+              {/* 22K Gold */}
               <div>
-                <label className="text-xs font-bold text-text-muted block mb-1.5">
-                  Silver Rate (₹ per 1 kg)
-                </label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-xs font-bold text-text">
+                    Gold 22K (916 Hallmarked) (₹ per 10 grams)
+                  </label>
+                  {newGold22Rate && (
+                    <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                      ₹{(parseFloat(newGold22Rate) / 10).toFixed(2)} / g
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  min="1000"
+                  step="100"
+                  value={newGold22Rate}
+                  onChange={(e) => setNewGold22Rate(e.target.value)}
+                  placeholder="e.g. 67780"
+                  className="w-full p-3 bg-surface-2 border border-border rounded-xl text-base font-bold text-text focus:ring-2 focus:ring-primary focus:outline-none"
+                />
+              </div>
+
+              {/* Silver */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-xs font-bold text-text">
+                    Silver Rate (₹ per 1 kg)
+                  </label>
+                  {newSilverRate && (
+                    <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                      ₹{(parseFloat(newSilverRate) / 1000).toFixed(2)} / g
+                    </span>
+                  )}
+                </div>
                 <input
                   type="number"
                   min="500"
@@ -393,14 +523,10 @@ export default function DashboardPage() {
                   placeholder="e.g. 88000"
                   className="w-full p-3 bg-surface-2 border border-border rounded-xl text-base font-bold text-text focus:ring-2 focus:ring-primary focus:outline-none"
                 />
-                {newSilverRate && (
-                  <p className="text-[11px] text-text-muted mt-1">
-                    = ₹{(parseFloat(newSilverRate) / 1000).toFixed(2)} per gram
-                  </p>
-                )}
               </div>
             </div>
-            <div className="flex gap-3 pt-1">
+
+            <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setShowRateEditor(false)}
                 disabled={rateSaving}
@@ -413,7 +539,7 @@ export default function DashboardPage() {
                 disabled={rateSaving || !newGoldRate || !newSilverRate}
                 className="flex-1 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold text-xs shadow-md transition-all disabled:opacity-50"
               >
-                {rateSaving ? 'Saving…' : 'Save Rates to DB'}
+                {rateSaving ? 'Saving to DB…' : 'Save Rates to DB'}
               </button>
             </div>
           </div>

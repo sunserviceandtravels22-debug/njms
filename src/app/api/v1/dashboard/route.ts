@@ -14,18 +14,19 @@ export async function GET(req: NextRequest) {
 
     const isStaff = user.role === 'STAFF';
 
-    // ── Date helpers ─────────────────────────────────────────────────────────
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // ── Date helpers (Clean UTC Midnight for MySQL @db.Date) ─────────────────
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStart = new Date(`${todayStr}T00:00:00.000Z`);
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 6);
+    const pastStr = pastDate.toISOString().split('T')[0];
+    const sevenDaysAgo = new Date(`${pastStr}T00:00:00.000Z`);
 
     // ── 1. Today's sales (Sale model, totalPaise field) ──────────────────────
     const todaySales = await db.sale.aggregate({
       where: {
-        status: { not: 'VOIDED' },
+        status: { not: 'CANCELLED' },
         date: { gte: todayStart },
       },
       _sum: { totalPaise: true },
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
     // ── 5. Sales trend — last 7 days ─────────────────────────────────────────
     const recentSales = await db.sale.findMany({
       where: {
-        status: { not: 'VOIDED' },
+        status: { not: 'CANCELLED' },
         date: { gte: sevenDaysAgo },
       },
       select: { date: true, totalPaise: true, discountPaise: true },
@@ -109,11 +110,26 @@ export async function GET(req: NextRequest) {
       value: g._count._all,
     }));
 
-    // ── 7. Today's rates from dailyRate ───────────────────────────────────────
-    const todayRates = await db.dailyRate.findMany({
+    // ── 7. Rates from dailyRate or latest available snapshot ──────────────────
+    let rates = await db.dailyRate.findMany({
       where: { date: todayStart },
       orderBy: [{ metal: 'asc' }, { purityPpt: 'desc' }],
     });
+
+    const isTodayRates = rates.length > 0;
+
+    // If today's rates haven't been entered yet, load the latest recorded rates
+    if (!isTodayRates) {
+      const latestDaily = await db.dailyRate.findFirst({
+        orderBy: { date: 'desc' },
+      });
+      if (latestDaily) {
+        rates = await db.dailyRate.findMany({
+          where: { date: latestDaily.date },
+          orderBy: [{ metal: 'asc' }, { purityPpt: 'desc' }],
+        });
+      }
+    }
 
     // ── 8. Recent customers ──────────────────────────────────────────────────
     const recentCustomerCount = await db.customer.count();
@@ -132,12 +148,13 @@ export async function GET(req: NextRequest) {
         totalCustomers: recentCustomerCount,
         salesTrend,
         categoryData,
-        rates: todayRates.map((r) => ({
+        rates: rates.map((r) => ({
           id: r.id,
           metal: r.metal,
           purityPpt: r.purityPpt,
           rateRupeesPerGram: Number(r.ratePaisePerGram) / 100,
         })),
+        isRatesSetToday: isTodayRates,
         isStaff,
       },
     });
