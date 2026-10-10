@@ -305,6 +305,49 @@ export default function RepledgePage() {
                       <span>Contract Date: {l.repledgeDate}</span>
                       <span className="font-bold text-text">Pledged Mass: {(l.totalGrossWeightMg / 1000).toFixed(3)}g</span>
                     </div>
+
+                    {l.linkedGirvis && l.linkedGirvis.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-border/60 space-y-2">
+                        <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                          Pledged Collateral & Customer Details:
+                        </div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {l.linkedGirvis.map((lg: any, idx: number) => (
+                            <div
+                              key={idx}
+                              className="p-2.5 rounded-xl bg-surface border border-border/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                            >
+                              <div className="space-y-0.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-bold text-xs text-primary">{lg.loanNo || 'Girvi'}</span>
+                                  <span className="font-semibold text-xs text-text">{lg.customerName}</span>
+                                  {lg.customerPhone && (
+                                    <span className="text-[10px] text-text-muted font-mono">📞 {lg.customerPhone}</span>
+                                  )}
+                                  {lg.customerRelation && (
+                                    <span className="text-[10px] text-text-muted">({lg.customerRelation})</span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                  {lg.items?.map((it: any, iIdx: number) => (
+                                    <span
+                                      key={iIdx}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-2 border border-border text-[10px] font-medium text-text"
+                                    >
+                                      <span>💎 {it.ornamentType}</span>
+                                      <span className="text-text-muted">({it.grossWeightGrams}g gr / {it.netWeightGrams}g net)</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="text-right text-[11px] shrink-0 font-bold text-text-muted">
+                                Net: {lg.weightNetGrams}g
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-4 self-end md:self-center shrink-0">
@@ -499,21 +542,40 @@ export default function RepledgePage() {
                           isChecked ? 'bg-primary/10 border-l-4 border-l-primary' : 'hover:bg-surface-2'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleSelectGirvi(res.id)}
-                            className="w-4 h-4 rounded text-primary"
+                            className="w-4 h-4 mt-1 rounded text-primary shrink-0"
                           />
-                          <div>
-                            <div className="flex items-center gap-2">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className="font-bold text-xs text-text">{res.loanNo}</span>
-                              <span className="text-xs text-primary font-bold">({res.customerName})</span>
+                              <span className="text-xs text-primary font-bold">{res.customerName}</span>
+                              {res.customerPhone && (
+                                <span className="text-[10px] text-text-muted font-mono">📞 {res.customerPhone}</span>
+                              )}
+                              {res.customerRelation && (
+                                <span className="text-[10px] text-text-muted">({res.customerRelation})</span>
+                              )}
                             </div>
-                            <p className="text-[11px] text-text-muted">
-                              {res.articlesSummary} • {res.totalNetGrams.toFixed(2)}g net
-                            </p>
+                            <div className="flex flex-wrap gap-1.5 pt-0.5">
+                              {res.items && res.items.length > 0 ? (
+                                res.items.map((it: any, idx: number) => (
+                                  <span
+                                    key={idx}
+                                    className="px-2 py-0.5 rounded bg-surface border border-border text-[10px] text-text font-medium"
+                                  >
+                                    💎 {it.ornamentType} • {it.grossWeightGrams}g gr / {it.netWeightGrams}g net
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[11px] text-text-muted">
+                                  {res.articlesSummary} • {res.totalNetGrams.toFixed(2)}g net
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 

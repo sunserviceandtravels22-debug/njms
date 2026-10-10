@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const {
+      customerId,
       sellerName,
       sellerPhone,
       grossWeightGrams,
@@ -29,8 +30,22 @@ export async function POST(req: NextRequest) {
       notes,
     } = body;
 
-    if (!sellerName || !sellerName.trim()) {
-      return NextResponse.json({ ok: false, error: 'Seller name is required' }, { status: 400 });
+    // Resolve display name from customer record if customerId provided
+    let resolvedSellerName = sellerName?.trim() || 'Walk-in Customer';
+    let resolvedSellerPhone = sellerPhone?.replace(/\D/g, '') || null;
+    if (customerId) {
+      const cust = await db.customer.findUnique({ where: { id: customerId } });
+      if (cust) {
+        resolvedSellerName = cust.name;
+        resolvedSellerPhone = cust.phone || resolvedSellerPhone;
+      }
+    }
+
+    if (!resolvedSellerName || resolvedSellerName === 'Walk-in Customer') {
+      // Allow walk-in without name when customerId is provided
+      if (!customerId) {
+        return NextResponse.json({ ok: false, error: 'Seller name or customer selection is required' }, { status: 400 });
+      }
     }
 
     const gGrams = parseFloat(grossWeightGrams);
@@ -71,7 +86,9 @@ export async function POST(req: NextRequest) {
       entityId: payment.id,
       after: {
         voucherNo,
-        sellerName: sellerName.trim(),
+        customerId: customerId || null,
+        sellerName: resolvedSellerName,
+        sellerPhone: resolvedSellerPhone,
         grossWeightGrams: gGrams,
         payableRupees: valResult.payableRupees,
       },
@@ -81,8 +98,9 @@ export async function POST(req: NextRequest) {
       ok: true,
       data: {
         voucherNo,
-        sellerName: sellerName.trim(),
-        sellerPhone: sellerPhone?.replace(/\D/g, '') || null,
+        sellerName: resolvedSellerName,
+        sellerPhone: resolvedSellerPhone,
+        customerId: customerId || null,
         valuation: valResult,
         paymentId: payment.id,
       },

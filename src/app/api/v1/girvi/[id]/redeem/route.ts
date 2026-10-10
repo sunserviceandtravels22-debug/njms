@@ -60,6 +60,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         data: { locationId: null },
       });
 
+      // 2b. Add to Delivery Queue for customer handover tracking
+      await tx.partialReleaseBatch.create({
+        data: {
+          girviId: loan.id,
+          batchNo: `REL-${loan.loanNo}`,
+          articleIdsJson: loan.items.map((it: any) => it.id),
+          state: 'PAID_AWAITING_RELEASE',
+          collectorName: loan.customer?.name || 'Customer',
+          collectorRelation: loan.customer?.relationName ? `${loan.customer.relationType}: ${loan.customer.relationName}` : 'Self',
+          minPrincipalToPayPaise: BigInt(0),
+        },
+      }).catch(() => {});
+
       // 3. Post Principal Receipt in Cashbook Payment Ledger
       await tx.payment.create({
         data: {

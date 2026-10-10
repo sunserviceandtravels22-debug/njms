@@ -425,6 +425,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Real-time Delivery & Vault Reminders Queue */}
+      <DeliveryQueueWidget />
+
       {/* Customers count */}
       {!loading && data && (
         <div className="bg-surface border border-border rounded-2xl p-4 shadow-2xs flex items-center gap-4">

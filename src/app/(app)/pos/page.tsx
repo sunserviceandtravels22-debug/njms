@@ -17,6 +17,7 @@ import {
   Scale
 } from 'lucide-react';
 import { calculateProfit, ProfitCalculation } from '@/lib/sales/calculations';
+import { CustomerOmniSelector, CustomerOmniData } from '@/components/customers/CustomerOmniSelector';
 
 interface ActiveItem {
   id: string;
@@ -28,13 +29,17 @@ interface ActiveItem {
   netWeightGrams: number;
   makingValueRupees: number;
   purchasePriceRupees: number;
+  status?: string;
+  ownership?: string;
 }
 
 export default function PosPage() {
   const [barcodeSearch, setBarcodeSearch] = useState('');
+  const [barcodeWarning, setBarcodeWarning] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ActiveItem | null>(null);
   const [sellingPrice, setSellingPrice] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerOmniData | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
 
@@ -85,14 +90,28 @@ export default function PosPage() {
 
   // Real-time stock lookup by scanned barcode tag
   useEffect(() => {
-    if (barcodeSearch.length >= 3) {
-      fetch(`/api/v1/inventory?search=${encodeURIComponent(barcodeSearch)}`, { credentials: 'include' })
+    if (barcodeSearch.trim().length >= 3) {
+      fetch(`/api/v1/inventory?search=${encodeURIComponent(barcodeSearch.trim())}`, { credentials: 'include' })
         .then((res) => res.json())
         .then((res) => {
           if (res.ok) {
             const list = Array.isArray(res.data?.items) ? res.data.items : Array.isArray(res.data) ? res.data : [];
             if (list.length > 0) {
               const found = list[0];
+              if (found.status === 'SOLD') {
+                setBarcodeWarning(`🚨 Item #${found.tagNo} (${found.name}) is ALREADY SOLD. It cannot be sold again.`);
+                setSelectedItem(null);
+                setSellingPrice('');
+                return;
+              }
+              if (found.status !== 'IN_STOCK') {
+                setBarcodeWarning(`⚠️ Item #${found.tagNo} status is "${found.status}". Only IN_STOCK items can be billed.`);
+                setSelectedItem(null);
+                setSellingPrice('');
+                return;
+              }
+
+              setBarcodeWarning(null);
               const netWeight = (found.netWeightMg || 0) / 1000;
               const making = found.makingValuePaise ? Math.round(Number(found.makingValuePaise) / 100) : (found.makingValueRupees || 0);
               const costBasis = found.costPaise ? Math.round(Number(found.costPaise) / 100) : Math.round(making + netWeight * 6800);
@@ -107,13 +126,20 @@ export default function PosPage() {
                 netWeightGrams: netWeight,
                 makingValueRupees: making,
                 purchasePriceRupees: costBasis,
+                status: found.status,
+                ownership: found.ownership,
               });
               const suggested = Math.round(costBasis * 1.15);
               setSellingPrice(suggested.toString());
+            } else {
+              setBarcodeWarning(`No inventory item found for "${barcodeSearch}"`);
+              setSelectedItem(null);
             }
           }
         })
         .catch(() => {});
+    } else {
+      setBarcodeWarning(null);
     }
   }, [barcodeSearch]);
 
@@ -154,8 +180,9 @@ export default function PosPage() {
           inventoryItemId: selectedItem.id,
           sellingPriceRupees: sellingPriceNum,
           paymentMethod,
-          customerName,
-          customerPhone,
+          customerId: selectedCustomer?.id,
+          customerName: selectedCustomer?.name || customerName || 'Walk-in Customer',
+          customerPhone: selectedCustomer?.phone || customerPhone || '',
           oldGoldValuationRupees: oldMetalValuation,
         }),
       });
@@ -218,6 +245,12 @@ export default function PosPage() {
             className="w-full text-2xl sm:text-4xl font-extrabold border-none outline-none placeholder-text-muted/40 text-text bg-transparent font-mono tracking-tight"
             placeholder="Scan Tag No / Barcode..."
           />
+          {barcodeWarning && (
+            <div className="mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2.5 text-rose-600 text-xs font-bold animate-pulse">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{barcodeWarning}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -226,9 +259,16 @@ export default function PosPage() {
           {/* Asset Summary Card */}
           <div className="lg:col-span-4 bg-surface p-6 rounded-2xl border border-border shadow-xs flex flex-col justify-between space-y-6">
             <div>
-              <span className="px-3 py-1 bg-primary/10 text-primary font-bold text-xs rounded-full uppercase">
-                {selectedItem.metal} ({selectedItem.category})
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-3 py-1 bg-primary/10 text-primary font-bold text-xs rounded-full uppercase">
+                  {selectedItem.metal} ({selectedItem.category})
+                </span>
+                {selectedItem.ownership === 'MEMO_IN' && (
+                  <span className="px-2.5 py-0.5 bg-blue-500/15 text-blue-600 border border-blue-500/30 font-black text-[10px] rounded-full uppercase tracking-wider">
+                    Wholesaler Memo Stock (Approval)
+                  </span>
+                )}
+              </div>
               <h2 className="text-2xl font-extrabold text-text tracking-tight mt-3">{selectedItem.name}</h2>
               <p className="text-xs text-text-muted font-mono mt-1">Tag: #{selectedItem.tagNo}</p>
 
@@ -509,18 +549,21 @@ export default function PosPage() {
                 </div>
               )}
 
-              {/* Customer & Payment Form */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-text-muted block mb-1 uppercase">Client Identity</label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="Customer Name (Optional)"
-                    className="w-full p-3 bg-surface-2 border border-border rounded-xl text-xs font-semibold text-text outline-none focus:border-primary"
-                  />
-                </div>
+              {/* Customer Dossier & Payment Form */}
+              <div className="space-y-4 pt-2 border-t border-border/60">
+                <CustomerOmniSelector
+                  selectedCustomer={selectedCustomer}
+                  onSelectCustomer={(cust) => {
+                    setSelectedCustomer(cust);
+                    if (cust) {
+                      setCustomerName(cust.name);
+                      setCustomerPhone(cust.phone);
+                    }
+                  }}
+                  title="Buyer Identity & CRM Profile"
+                  required={false}
+                />
+
                 <div>
                   <label className="text-xs font-bold text-text-muted block mb-1 uppercase">Payment Settlement Path</label>
                   <select

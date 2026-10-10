@@ -35,7 +35,7 @@ export const Customer360Modal: React.FC<Customer360ModalProps> = ({
 }) => {
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'SALES' | 'GIRVI' | 'REPLEDGE'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'SALES' | 'GIRVI' | 'REPLEDGE' | 'OLD_GOLD' | 'TIMELINE'>('OVERVIEW');
 
   useEffect(() => {
     setLoading(true);
@@ -189,38 +189,24 @@ export const Customer360Modal: React.FC<Customer360ModalProps> = ({
 
             {/* Navigation Tabs */}
             <div className="flex items-center gap-2 border-b border-border pb-2 overflow-x-auto custom-scrollbar">
-              <button
-                onClick={() => setActiveTab('OVERVIEW')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
-                  activeTab === 'OVERVIEW' ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:text-text'
-                }`}
-              >
-                Overview & KYC
-              </button>
-              <button
-                onClick={() => setActiveTab('SALES')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
-                  activeTab === 'SALES' ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:text-text'
-                }`}
-              >
-                Sales History ({data.sales.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('GIRVI')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
-                  activeTab === 'GIRVI' ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:text-text'
-                }`}
-              >
-                Girvi Loans ({data.girviLoans.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('REPLEDGE')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
-                  activeTab === 'REPLEDGE' ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:text-text'
-                }`}
-              >
-                Repledged Exposure ({data.repledges.length})
-              </button>
+              {([
+                ['OVERVIEW', 'Overview & KYC'],
+                ['TIMELINE', `Timeline`],
+                ['SALES', `Sales (${data.sales.length})`],
+                ['GIRVI', `Girvi (${data.girviLoans.length})`],
+                ['REPLEDGE', `Repledge (${data.repledges.length})`],
+                ['OLD_GOLD', `Old Gold (${(data.oldGoldVouchers || []).length})`],
+              ] as [string, string][]).map(([tab, label]) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
+                    activeTab === tab ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:text-text'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
 
             {/* Tab 1: Overview & KYC */}
@@ -347,7 +333,7 @@ export const Customer360Modal: React.FC<Customer360ModalProps> = ({
             {activeTab === 'REPLEDGE' && (
               <div className="space-y-2">
                 {data.repledges.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-text-muted">None of this customer's ornaments are currently repledged with external financiers.</div>
+                  <div className="p-8 text-center text-xs text-text-muted">None of this customer&apos;s ornaments are currently repledged with external financiers.</div>
                 ) : (
                   data.repledges.map((rep: any) => (
                     <div key={rep.linkId} className="p-3.5 bg-surface rounded-xl border border-border flex items-center justify-between gap-3 shadow-2xs">
@@ -374,6 +360,73 @@ export const Customer360Modal: React.FC<Customer360ModalProps> = ({
                 )}
               </div>
             )}
+
+            {/* Tab 5: Old Gold Vouchers */}
+            {activeTab === 'OLD_GOLD' && (
+              <div className="space-y-2">
+                {(data.oldGoldVouchers || []).length === 0 ? (
+                  <div className="p-8 text-center text-xs text-text-muted">No old gold / silver buyback vouchers recorded for this customer.</div>
+                ) : (
+                  (data.oldGoldVouchers || []).map((v: any) => (
+                    <div key={v.id} className="p-3.5 bg-surface rounded-xl border border-border flex items-center justify-between gap-3 shadow-2xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-text">{v.voucherNo}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/10 text-amber-800 border border-amber-500/20">Buyback</span>
+                        </div>
+                        <p className="text-xs text-text-muted mt-0.5">{v.date} • {v.grossWeightGrams}g gross</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-base font-black text-amber-700">₹{(v.payableRupees || 0).toLocaleString('en-IN')}</span>
+                        <p className="text-[10px] text-text-muted">Paid to Seller</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Tab 6: Unified Activity Timeline */}
+            {activeTab === 'TIMELINE' && (() => {
+              // Build a merged, sorted timeline from all activity types
+              const events: any[] = [
+                ...(data.sales || []).map((s: any) => ({ type: 'SALE', date: s.date, label: `Invoice ${s.invoiceNo}`, amount: s.totalRupees, color: 'emerald', sub: `${s.itemsCount} items` })),
+                ...(data.girviLoans || []).map((g: any) => ({ type: 'GIRVI', date: g.date, label: `Girvi ${g.loanNo}`, amount: g.principalRupees, color: 'amber', sub: `${g.items.length} ornaments • ${g.status}` })),
+                ...(data.repledges || []).map((r: any) => ({ type: 'REPLEDGE', date: r.sentOn || r.date, label: `Repledge ${r.repledgeLoanNo}`, amount: r.allocatedRupees, color: 'indigo', sub: `Girvi: ${r.girviLoanNo}` })),
+                ...(data.oldGoldVouchers || []).map((v: any) => ({ type: 'OLD_GOLD', date: v.date, label: `Old Gold ${v.voucherNo}`, amount: v.payableRupees, color: 'orange', sub: `${v.grossWeightGrams}g gross` })),
+              ].filter((e) => e.date).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+              const colorMap: Record<string, string> = {
+                emerald: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20',
+                amber: 'bg-amber-500/10 text-amber-800 border-amber-500/20',
+                indigo: 'bg-indigo-500/10 text-indigo-700 border-indigo-500/20',
+                orange: 'bg-orange-500/10 text-orange-700 border-orange-500/20',
+              };
+
+              return (
+                <div className="space-y-2">
+                  {events.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-text-muted">No activity recorded yet for this customer.</div>
+                  ) : events.map((ev, i) => (
+                    <div key={i} className="p-3.5 bg-surface rounded-xl border border-border flex items-center justify-between gap-3 shadow-2xs">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${ev.color === 'emerald' ? 'bg-emerald-500' : ev.color === 'amber' ? 'bg-amber-500' : ev.color === 'indigo' ? 'bg-indigo-500' : 'bg-orange-500'}`} />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-text">{ev.label}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold border ${colorMap[ev.color]}`}>{ev.type}</span>
+                          </div>
+                          <p className="text-[11px] text-text-muted">{ev.date} • {ev.sub}</p>
+                        </div>
+                      </div>
+                      <span className={`text-sm font-black ${ev.color === 'emerald' ? 'text-emerald-600' : ev.color === 'amber' ? 'text-amber-700' : ev.color === 'indigo' ? 'text-indigo-600' : 'text-orange-600'}`}>
+                        ₹{(ev.amount || 0).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
 

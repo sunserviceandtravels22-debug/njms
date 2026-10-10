@@ -17,11 +17,11 @@ import {
 } from 'lucide-react';
 import { calculateOldGoldValuation, OldGoldValuationResult } from '@/domain/oldgold/valuation';
 import { formatMoney } from '@/domain/money';
+import { CustomerOmniSelector, CustomerOmniData } from '@/components/customers/CustomerOmniSelector';
 
 export default function OldGoldPage() {
   const [metalType, setMetalType] = useState<'GOLD' | 'SILVER'>('GOLD');
-  const [sellerName, setSellerName] = useState('');
-  const [sellerPhone, setSellerPhone] = useState('');
+  const [selectedSeller, setSelectedSeller] = useState<CustomerOmniData | null>(null);
   const [grossWeightGrams, setGrossWeightGrams] = useState('');
   const [stoneDeductionGrams, setStoneDeductionGrams] = useState('0');
   const [purityPercent, setPurityPercent] = useState('91.6'); // 91.6% (22K) default
@@ -93,8 +93,12 @@ export default function OldGoldPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sellerName.trim() || gWeight <= 0) {
-      alert('Seller name and valid gross weight in Grams (g) are required');
+    if (!selectedSeller && gWeight <= 0) {
+      alert('Select a seller and enter valid gross weight');
+      return;
+    }
+    if (gWeight <= 0) {
+      alert('Valid gross weight in Grams (g) is required');
       return;
     }
 
@@ -105,8 +109,9 @@ export default function OldGoldPage() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          sellerName: sellerName.trim(),
-          sellerPhone: sellerPhone.trim(),
+          customerId: selectedSeller?.id,
+          sellerName: selectedSeller?.name || 'Walk-in Customer',
+          sellerPhone: selectedSeller?.phone || '',
           grossWeightGrams: gWeight,
           stoneDeductionGrams: sWeight,
           testedPurityPpt,
@@ -124,8 +129,7 @@ export default function OldGoldPage() {
       }
 
       setCompletedVoucher(json.data);
-      setSellerName('');
-      setSellerPhone('');
+      setSelectedSeller(null);
       setGrossWeightGrams('');
     } catch (err: any) {
       alert(err.message || 'Processing error');
@@ -177,30 +181,15 @@ export default function OldGoldPage() {
 
       {/* Main Form */}
       <form onSubmit={handleSubmit} className="bg-surface p-6 rounded-2xl border border-border space-y-5 shadow-xs">
-        {/* Seller Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs font-bold text-text-muted block mb-1">Seller Full Name *</label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Ramesh Kumar"
-              value={sellerName}
-              onChange={(e) => setSellerName(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-surface-2 border border-border rounded-xl text-xs font-semibold text-text focus:outline-none focus:border-amber-500"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-text-muted block mb-1">Seller Mobile Number</label>
-            <input
-              type="tel"
-              placeholder="10-digit Phone"
-              value={sellerPhone}
-              onChange={(e) => setSellerPhone(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-surface-2 border border-border rounded-xl text-xs font-semibold text-text focus:outline-none focus:border-amber-500"
-            />
-          </div>
+        {/* Seller: Customer Omni Selector */}
+        <div>
+          <label className="text-xs font-bold text-text-muted block mb-1">Seller / Customer Identity *</label>
+          <CustomerOmniSelector
+            selectedCustomer={selectedSeller}
+            onSelectCustomer={setSelectedSeller}
+            title="Search by Name / Phone / Father's Name / ID"
+            required={false}
+          />
         </div>
 
         {/* Weight & Rate Inputs */}

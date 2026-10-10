@@ -66,6 +66,16 @@ export async function GET(req: NextRequest) {
       db.repledgeLoan.count({ where: whereClause }),
     ]);
 
+    const allGirviIds = Array.from(new Set(loans.flatMap((l) => l.links.map((k) => k.girviId))));
+    const girvis =
+      allGirviIds.length > 0
+        ? await db.girviLoan.findMany({
+            where: { id: { in: allGirviIds } },
+            include: { customer: true, items: true },
+          })
+        : [];
+    const girviMap = new Map(girvis.map((g) => [g.id, g]));
+
     const formatted = loans.map((l) => {
       let totalGrossWeightMg = 0;
       let totalNetWeightMg = 0;
@@ -79,6 +89,27 @@ export async function GET(req: NextRequest) {
       const financierRatePct = (l.rateBp || 150) / 100;
       const financierMonthlyInterestPaise =
         (l.principalPaise * BigInt(Math.round(financierRatePct * 100))) / BigInt(10000);
+
+      const linkedGirvis = l.links.map((link) => {
+        const g = girviMap.get(link.girviId);
+        return {
+          girviId: link.girviId,
+          loanNo: g?.loanNo || '',
+          customerName: g?.customer?.name || 'Unknown Customer',
+          customerPhone: g?.customer?.phone || '',
+          customerRelation: g?.customer?.relationName
+            ? `${g.customer.relationType}: ${g.customer.relationName}`
+            : '',
+          items:
+            g?.items.map((it) => ({
+              ornamentType: it.ornamentType,
+              grossWeightGrams: (it.grossWeightMg / 1000).toFixed(3),
+              netWeightGrams: (it.netWeightMg / 1000).toFixed(3),
+            })) || [],
+          weightNetGrams: (link.weightNetMg / 1000).toFixed(3),
+          returnedOn: link.returnedOn ? link.returnedOn.toISOString().split('T')[0] : null,
+        };
+      });
 
       return {
         id: l.id,
@@ -98,6 +129,7 @@ export async function GET(req: NextRequest) {
         totalNetWeightMg,
         financierMonthlyInterestPaise: financierMonthlyInterestPaise.toString(),
         linkedLoansCount: l.links.length,
+        linkedGirvis,
         createdAt: l.createdAt.toISOString(),
       };
     });

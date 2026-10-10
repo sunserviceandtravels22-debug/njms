@@ -43,15 +43,35 @@ export async function GET(
     // Extract all girvi loan IDs for this customer
     const girviIds = customer.girviLoans.map((g) => g.id);
 
-    // Fetch all repledge links for this customer's girvi loans
-    const repledgeLinks = girviIds.length > 0
-      ? await db.repledgeLink.findMany({
-          where: { girviId: { in: girviIds } },
-          include: {
-            loan: true,
-          },
-        })
-      : [];
+    // Fetch repledge links + old-gold vouchers in parallel
+    const [repledgeLinks, oldGoldPayments] = await Promise.all([
+      girviIds.length > 0
+        ? db.repledgeLink.findMany({
+            where: { girviId: { in: girviIds } },
+            include: { loan: true },
+          })
+        : Promise.resolve([]),
+      // Old-gold vouchers: We find them via ActivityLog for this customer.
+      db.activityLog.findMany({
+        where: {
+          action: 'CREATE_OLD_GOLD_VOUCHER',
+        },
+        orderBy: { at: 'desc' },
+        take: 200,
+      }),
+    ]);
+
+    // Filter old-gold audit entries that belong to this customer by name or phone
+    const myPhone = customer.phone;
+    const myName = customer.name.toLowerCase();
+    const filteredOGPayments = oldGoldPayments.filter((al: any) => {
+      try {
+        const after: any = al.after || {};
+        const aName = (after.sellerName || '').toLowerCase();
+        const aPhone = (after.sellerPhone || '').replace(/\D/g, '');
+        return aName === myName || (myPhone && aPhone === myPhone.replace(/\D/g, ''));
+      } catch { return false; }
+    });
 
     // Format Sales History
     let totalSalesPaise = BigInt(0);
@@ -109,7 +129,7 @@ export async function GET(
       });
 
       // Find if this specific girvi is repledged
-      const linkedRepledges = repledgeLinks.filter((rl) => rl.girviId === g.id);
+      const linkedRepledges = (repledgeLinks as any[]).filter((rl: any) => rl.girviId === g.id);
 
       return {
         id: g.id,
@@ -123,11 +143,11 @@ export async function GET(
         netWeightGrams: mgToGrams(loanNetMg),
         valuationRupees: paiseToRupees(loanValuationPaise),
         items,
-        isRepledged: linkedRepledges.some((r) => r.loan.status === 'ACTIVE' && r.returnedOn === null),
-        repledgeInfo: linkedRepledges.map((r) => ({
-          repledgeLoanNo: r.loan.loanNo,
-          financierVendorId: r.loan.vendorId,
-          status: r.loan.status,
+        isRepledged: linkedRepledges.some((r: any) => r.loan?.status === 'ACTIVE' && r.returnedOn === null),
+        repledgeInfo: linkedRepledges.map((r: any) => ({
+          repledgeLoanNo: r.loan?.loanNo || '',
+          financierVendorId: r.loan?.vendorId || '',
+          status: r.loan?.status || '',
           sentOn: r.sentOn ? r.sentOn.toISOString().split('T')[0] : null,
           returnedOn: r.returnedOn ? r.returnedOn.toISOString().split('T')[0] : null,
           allocatedRupees: paiseToRupees(r.allocatedPrincipalPaise),
@@ -136,18 +156,31 @@ export async function GET(
     });
 
     // Format Repledged Exposure
-    const formattedRepledges = repledgeLinks.map((rl) => ({
+    const formattedRepledges = (repledgeLinks as any[]).map((rl: any) => ({
       linkId: rl.id,
-      repledgeLoanNo: rl.loan.loanNo,
+      repledgeLoanNo: rl.loan?.loanNo || '',
       girviLoanNo: customer.girviLoans.find((g) => g.id === rl.girviId)?.loanNo || rl.girviId,
-      financierVendorId: rl.loan.vendorId,
+      financierVendorId: rl.loan?.vendorId || '',
       weightNetGrams: mgToGrams(rl.weightNetMg),
       allocatedRupees: paiseToRupees(rl.allocatedPrincipalPaise),
-      status: rl.loan.status,
+      status: rl.loan?.status || '',
       isReturned: rl.returnedOn !== null,
       sentOn: rl.sentOn ? rl.sentOn.toISOString().split('T')[0] : null,
       returnedOn: rl.returnedOn ? rl.returnedOn.toISOString().split('T')[0] : null,
     }));
+
+    // Format Old Gold Vouchers
+    const formattedOldGold = (filteredOGPayments as any[]).map((al: any) => {
+      const after: any = al.after || {};
+      return {
+        id: al.id.toString(),
+        voucherNo: after.voucherNo || al.entityId,
+        date: al.at ? al.at.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        grossWeightGrams: after.grossWeightGrams || 0,
+        payableRupees: after.payableRupees || 0,
+        sellerName: after.sellerName || customer.name,
+      };
+    });
 
     // Customer 360 Summary Metrics
     const summary = {
@@ -156,7 +189,8 @@ export async function GET(
       activeGirviCount,
       activeGirviPrincipalRupees: paiseToRupees(activeGirviPrincipalPaise),
       totalPledgedNetWeightGrams: mgToGrams(totalPledgedNetWeightMg),
-      activeRepledgedCount: formattedRepledges.filter((r) => !r.isReturned && r.status === 'ACTIVE').length,
+      activeRepledgedCount: formattedRepledges.filter((r: any) => !r.isReturned && r.status === 'ACTIVE').length,
+      oldGoldVouchersCount: formattedOldGold.length,
     };
 
     return NextResponse.json({
@@ -169,6 +203,7 @@ export async function GET(
         sales: formattedSales,
         girviLoans: formattedGirvis,
         repledges: formattedRepledges,
+        oldGoldVouchers: formattedOldGold,
         summary,
       },
     });

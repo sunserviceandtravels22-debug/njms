@@ -26,6 +26,8 @@ import {
   Receipt,
   Coins,
   ScrollText,
+  Clock,
+  Layers,
 } from 'lucide-react';
 import { SaveIndicator } from '../ui/SaveIndicator';
 import { AlertBell } from '../AlertBell';
@@ -82,6 +84,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   const moreItems = [
     { label: 'Sales History', href: '/sales', icon: Receipt },
     { label: 'Old Metal & Exchange', href: '/old-gold', icon: Coins },
+    { label: 'Memo-In (Approval Stock)', href: '/memo-in', icon: Layers },
+    { label: 'Settlement Queue', href: '/settlement-queue', icon: Clock },
     { label: 'Alerts', href: '/alerts', icon: Bell },
     { label: 'Cash Flow', href: '/cashbook', icon: Wallet },
     { label: 'Re-pledge', href: '/repledge', icon: Building2 },

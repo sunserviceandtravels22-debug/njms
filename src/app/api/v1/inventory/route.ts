@@ -61,6 +61,12 @@ export async function GET(req: NextRequest) {
       makingValueRupees: paiseToRupees(item.makingValuePaise), // Displayed in Rupees (₹)
       huid: item.huid || null,
       status: item.status,
+      ownership: item.ownership,
+      memoInLineId: item.memoInLineId,
+      preferredVendorId: item.preferredVendorId,
+      costPaise: item.costPaise ? item.costPaise.toString() : null,
+      costRupees: item.costPaise ? paiseToRupees(item.costPaise) : null,
+      attributesJson: item.attributesJson,
       photoUrl: item.photoUrl || null,
       createdAt: item.createdAt.toISOString(),
     }));
@@ -96,6 +102,11 @@ export async function POST(req: NextRequest) {
       makingValueRupees = 0,
       huid,
       photoUrl,
+      costRupees,
+      ownership = 'OWNED',
+      vendorName,
+      purchaseTerms = 'PAID_IMMEDIATE',
+      provisionalRatePerGram,
     } = body;
 
     if (!name || !name.trim()) {
@@ -114,6 +125,18 @@ export async function POST(req: NextRequest) {
     const tagNo = `TAG-${Date.now().toString().slice(-8)}`;
     const generatedSku = sku?.trim() || `${category.toUpperCase().slice(0, 3)}-${Date.now().toString().slice(-4)}`;
 
+    const cRupees = parseFloat(costRupees) || 0;
+    const costPaise = cRupees > 0 ? rupeesToPaise(cRupees) : null;
+
+    const attributesJson: any = {};
+    if (purchaseTerms) attributesJson.purchaseTerms = purchaseTerms;
+    if (vendorName) attributesJson.vendorName = vendorName.trim();
+    if (provisionalRatePerGram) attributesJson.provisionalRatePerGram = parseFloat(provisionalRatePerGram);
+    if (purchaseTerms === 'ON_CREDIT_FLOATING_RATE') {
+      attributesJson.settlementStatus = 'UNSETTLED';
+      attributesJson.receivedDate = new Date().toISOString().split('T')[0];
+    }
+
     const newItem = await db.inventoryItem.create({
       data: {
         tagNo,
@@ -127,6 +150,9 @@ export async function POST(req: NextRequest) {
         netWeightMg: netMg,
         makingType: (makingType as MakingType) || MakingType.PER_GRAM,
         makingValuePaise: rupeesToPaise(parseFloat(makingValueRupees) || 0),
+        costPaise,
+        ownership: ownership === 'MEMO_IN' ? 'MEMO_IN' : 'OWNED',
+        attributesJson: Object.keys(attributesJson).length > 0 ? attributesJson : undefined,
         huid: huid?.trim() || null,
         photoUrl: photoUrl || null,
         createdById: user.id,

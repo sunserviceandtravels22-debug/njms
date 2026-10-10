@@ -116,11 +116,25 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // 2. Mark Inventory Item as SOLD
+      // 2. Mark Inventory Item as SOLD and flip MEMO_IN ownership to OWNED
       const upd = await tx.inventoryItem.update({
         where: { id: item.id },
-        data: { status: 'SOLD' },
+        data: {
+          status: 'SOLD',
+          ownership: 'OWNED',
+        },
       });
+
+      // 2b. If item came from a wholesaler memo-in, update the MemoInLine
+      if (item.memoInLineId) {
+        await tx.memoInLine.update({
+          where: { id: item.memoInLineId },
+          data: {
+            status: 'SOLD',
+            convertedSaleId: sale.id,
+          },
+        }).catch(() => {});
+      }
 
       // 3. Post Cashbook Payment In (if net payable > 0 and not full credit)
       let pmt = null;

@@ -34,7 +34,7 @@ export default function SettlementQueuePage() {
   const fetchQueue = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/settlement-queue');
+      const res = await fetch('/api/v1/settlement-queue', { credentials: 'include' });
       const json = await res.json();
       if (json.ok) setLots(json.data || []);
     } catch {
@@ -76,6 +76,7 @@ export default function SettlementQueuePage() {
     try {
       const res = await fetch('/api/v1/settlement-queue/settle', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lotIds: Array.from(selectedIds),
@@ -98,7 +99,7 @@ export default function SettlementQueuePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-28 lg:pb-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
